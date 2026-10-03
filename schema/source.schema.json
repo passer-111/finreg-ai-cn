@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/finreg-ai-cn/schema/source.schema.json",
+  "$id": "https://github.com/passer-111/finreg-ai-cn/schema/source.schema.json",
   "title": "数据源登记表",
   "description": "定义 data/sources.yaml 的结构。本项目把「数据源」当作一等公民单独建模，而不是把 URL 硬编码在各个抓取器里。这样做的原因是：政府网站会改版、会下架、会合并，数据源本身的状态需要被独立管理和审计。当某个源失效时，我们只需要改这一个文件，不必改代码，也不必发版。",
   "type": "object",

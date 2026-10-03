@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/finreg-ai-cn/schema/policy.schema.json",
+  "$id": "https://github.com/passer-111/finreg-ai-cn/schema/policy.schema.json",
   "title": "金融 AI 合规政策记录",
   "description": "单条政策的完整记录结构。本 schema 是项目的核心契约：所有数据文件必须通过校验才能进入仓库。设计上把「时效性」作为第一公民——status / effective_from / effective_until / supersedes / superseded_by / last_verified 六件套共同回答一个合规场景唯一重要的问题：「这条政策现在还有效吗，依据是什么」。",
   "type": "object",

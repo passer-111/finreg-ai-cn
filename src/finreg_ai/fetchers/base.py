@@ -58,10 +58,14 @@ DEFAULT_RETRIES = 3
 # 「UnicodeEncodeError: 'latin-1' codec can't encode characters」，
 # 而且是所有请求一起失败——本项目的注释风格是中文，
 # 极易在写 UA 时顺手带上中文说明，这个坑已经踩过一次。
+# 【这个 URL 不是装饰】User-Agent 里的联系方式是爬虫礼仪的一部分：
+# 站点运营方会顺着它找到项目主页。若指向一个不存在的地址，
+# 对方无法判断我们是善意低频抓取还是恶意爬虫，也无法在有问题时联系我们。
+# 因此它必须指向真实可访问的仓库地址，仓库改名或迁移时要同步更新这一行。
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 "
-    "finreg-ai-cn/0.1 (+https://github.com/finreg-ai-cn; compliance policy KB; low-frequency crawl)"
+    "finreg-ai-cn/0.1 (+https://github.com/passer-111/finreg-ai-cn; compliance policy KB; low-frequency crawl)"
 )
 
 
