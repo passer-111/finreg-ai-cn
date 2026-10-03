@@ -1,0 +1,141 @@
+# ============================================================
+# 政策记录：生成式人工智能服务管理暂行办法
+# ------------------------------------------------------------
+# 这是中国生成式 AI 监管的基础性部门规章，也是金融机构部署
+# 大模型应用时最常被引用的合规依据。金融监管总局 2026 年 AI
+# 指导意见中「外部引入的生成式人工智能模型需经过网信部门备案」
+# 这一要求，其制度依据即来自本办法。
+# ============================================================
+
+# ---- 身份标识 ----
+id: cac-2023-genai-interim-measures              # 唯一标识
+title: 生成式人工智能服务管理暂行办法              # 官方全称
+title_en: null                                   # 未查到官方英文版
+issuer: 国家互联网信息办公室、国家发展和改革委员会、教育部、科学技术部、工业和信息化部、公安部、国家广播电视总局  # 七部门联合公布
+issuer_code: cac                                 # 主发文机关代码
+doc_number: null                                 # 公开页面未标注发文字号
+
+# ---- 法域 ----
+jurisdiction: CN                                 # 法域
+jurisdiction_detail: null                        # 国家层面
+
+# ---- 效力判断 ----
+instrument_type: 部门规章                          # 层级：七部门联合公布的部门规章
+bindingness: binding                             # 约束力：设定强制义务与备案要求，违反由网信等部门依法处理
+ai_relevance: core                               # 相关度：生成式 AI 的基础性监管规章
+
+# ---- 所属领域与主题 ----
+domain:                                          # 所属领域
+  - 人工智能                                      # AI 领域
+  - 金融                                         # 金融场景强相关
+  - 数据                                         # 训练数据治理
+topics:                                          # 主题标签
+  - algorithm-filing                             # 服务备案（核心主题）
+  - data-quality                                 # 训练数据质量
+  - personal-information                         # 个人信息保护
+  - content-labeling                             # 内容标识
+  - consumer-protection                          # 用户权益
+  - supervision-and-reporting                     # 监管报告
+
+# ---- 时效性 ----
+status: effective                                # 当前状态：现行有效
+published_on: 2023-07-13                         # 公布日期
+effective_from: 2023-08-15                       # 生效日期
+effective_until: null                            # 无固定失效期限
+supersedes: []                                   # 未取代先前文件
+superseded_by: null                              # 未被取代
+amends: []                                       # 未修订任何文件
+amended_by: []                                   # 未被修订
+
+# ---- 版本链 ----
+versions:
+  - version: 1                                   # 首版
+    published_on: 2023-07-13                     # 公布日期
+    effective_from: 2023-08-15                   # 生效日期
+    effective_until: null                        # 尚未失效
+    status: effective                            # 现行有效
+    url: https://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm  # 官方原文链接
+    archived_url: null                           # 官方页面可访问
+    content_hash: null                           # 未计算摘要
+    change_note: null                            # 首版
+
+# ---- 来源溯源 ----
+source:
+  url: https://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm  # 官方原文链接
+  site: cac.gov.cn                               # 来源站点
+  tier: primary                                  # 官方原始渠道
+  fetched_at: 2026-10-03T12:00:00+08:00          # 整理时间
+  http_status: null                              # 未执行抓取
+  content_hash: null                             # 未计算摘要
+  snapshot_path: null                            # 未保存快照
+
+# ---- 核验台账 ----
+last_verified: 2026-10-03                        # 最近核验日期
+verified_by: automated                           # 检索整理，尚未人工核对
+verified_note: 公布日期 2023-07-13、施行日期 2023-08-15 为广为引用的通行表述，仍需人工打开官方页面确认详情页 URL 与日期条款。
+
+# ---- 适用主体 ----
+applicable_to:                                   # 原文明确的适用主体
+  - 向中华人民共和国境内公众提供生成式人工智能服务的服务提供者  # 主要适用主体
+
+# ---- 关键义务 ----
+key_obligations:
+  - clause: 第四条                                 # 条款定位
+    summary: 提供和使用生成式人工智能服务应坚持社会主义核心价值观，不得生成煽动颠覆国家政权、恐怖主义、民族仇恨、暴力、淫秽色情等法律禁止的内容
+    obligation_type: prohibition                   # 禁止性要求
+    tags:
+      - consumer-protection                        # 内容安全
+
+  - clause: 第七条                                 # 条款定位
+    summary: 生成式人工智能服务提供者应当依法开展预训练、优化训练等训练数据处理活动，使用具有合法来源的数据和基础模型，不得侵害他人知识产权
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - data-quality                               # 训练数据来源合法
+      - open-source-management                     # 基础模型来源
+
+  - clause: 第八条                                 # 条款定位
+    summary: 在训练过程中使用的数据涉及个人信息的，应当取得个人同意或符合法律、行政法规规定的其他情形
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - personal-information                       # 个人信息同意
+
+  - clause: 第九条                                 # 条款定位
+    summary: 服务提供者应当承担网络信息内容生产者责任，履行网络信息安全义务；涉及个人信息的，依法承担个人信息处理者责任
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - supervision-and-reporting                  # 主体责任
+      - personal-information                       # 个人信息责任
+
+  - clause: 第十二条                               # 条款定位
+    summary: 应当按照《互联网信息服务深度合成管理规定》对图片、视频等生成内容进行标识
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - content-labeling                           # 内容标识
+
+  - clause: 第十四条                               # 条款定位
+    summary: 提供者发现违法内容的，应当及时采取停止生成、停止传输、消除等处置措施并优化训练；发现使用者利用服务从事违法活动的，应当依法采取警示、限制功能、暂停或终止服务等措施并保存有关记录
+    obligation_type: requires-recordkeeping        # 需处置并记录
+    tags:
+      - consumer-protection                        # 内容处置
+      - supervision-and-reporting                  # 记录留存
+
+  - clause: 第十五条                               # 条款定位
+    summary: 提供者应当建立健全投诉、举报机制，设置便捷的投诉举报入口，公布处理流程和反馈时限，及时受理处理并反馈
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - consumer-protection                        # 投诉举报机制
+
+  - clause: 第十七条                               # 条款定位
+    summary: 提供具有舆论属性或社会动员能力的生成式人工智能服务的，应当按照国家有关规定开展安全评估，并履行算法备案和变更、注销备案手续
+    obligation_type: requires-reporting            # 需备案
+    tags:
+      - algorithm-filing                           # 算法备案（对金融机构最关键）
+      - supervision-and-reporting                  # 安全评估
+
+# ---- 其它 ----
+language: zh-CN                                  # 正文语言
+tags:                                            # 自由标签
+  - 网信办牵头                                    # 发文机关特征
+  - 七部门联合发布                                 # 发文形式
+  - 生成式AI基础规章                               # 定位标注
+notes: 共二十四条。适用范围的关键边界：仅从事生成式 AI 研发且未向境内公众提供服务的，以及从事新闻出版、影视制作、文艺创作等活动的不适用本办法（第二条）。对金融机构的意义：①若自研大模型仅内部使用不对外提供服务，原则上不落入本办法，但一旦面向客户提供（如智能客服、智能投顾），即需评估是否触发第十七条的备案与安全评估义务；②第七条要求使用合法来源的数据与基础模型，直接约束金融机构引入第三方开源模型的行为；③第八条的同意要求与金融监管总局「个人信息不得用于生成式 AI 模型训练和优化」的规定形成双重约束。第十七条是金融机构最需关注的一条——「具有舆论属性或社会动员能力」这一限定语的解释空间，直接决定是否需要备案。

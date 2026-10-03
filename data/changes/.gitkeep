@@ -1,0 +1,5 @@
+# 本文件存在的唯一目的是让 git 保留这个空目录。
+#
+# data/changes/ 存放抓取流程自动产出的变更流（YYYY-MM-DD.json），
+# 由 .github/workflows/fetch.yml 写入并提交。
+# 目录必须在克隆后立即存在，否则该工作流里的 git add 会因路径不存在而失败。

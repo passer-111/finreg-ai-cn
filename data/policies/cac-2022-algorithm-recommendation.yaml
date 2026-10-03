@@ -1,0 +1,140 @@
+# ============================================================
+# 政策记录：互联网信息服务算法推荐管理规定
+# ------------------------------------------------------------
+# 中国 AI 监管体系的最早一块基石（2022-03 施行），也是后续
+# 深度合成、生成式 AI、内容标识等一系列规定的上位依据。
+# 其中「算法备案」制度即由此确立，是金融机构使用算法
+# 进行个性化推荐时必须评估的合规前置条件。
+# ============================================================
+
+# ---- 身份标识 ----
+id: cac-2022-algorithm-recommendation            # 唯一标识
+title: 互联网信息服务算法推荐管理规定              # 官方全称
+title_en: null                                   # 未查到官方英文版
+issuer: 国家互联网信息办公室、工业和信息化部、公安部、国家市场监督管理总局  # 四部门联合发布
+issuer_code: cac                                 # 主发文机关代码
+doc_number: null                                 # 公开页面未标注发文字号
+
+# ---- 法域 ----
+jurisdiction: CN                                 # 法域
+jurisdiction_detail: null                        # 国家层面
+
+# ---- 效力判断 ----
+instrument_type: 部门规章                          # 层级：四部门联合发布的部门规章
+bindingness: binding                             # 约束力：设定强制义务与算法备案要求
+ai_relevance: related                            # 相关度：主体为算法推荐技术，非专指 AI，
+                                                 # 但推荐算法属 AI 技术范畴，且是后续 AI 规章的上位依据
+domain:                                          # 所属领域
+  - 人工智能                                      # AI 相关
+  - 金融                                         # 金融场景相关（智能投顾、产品推荐）
+  - 消费者权益                                    # 消费者保护
+topics:                                          # 主题标签
+  - algorithm-filing                             # 算法备案（核心主题）
+  - disclosure                                   # 算法透明度说明
+  - bias-and-fairness                            # 差别待遇禁止
+  - consumer-protection                          # 消费者权益
+  - supervision-and-reporting                     # 安全评估
+
+# ---- 时效性 ----
+status: effective                                # 当前状态：现行有效
+published_on: 2021-12-31                         # 公布日期
+effective_from: 2022-03-01                       # 生效日期
+effective_until: null                            # 无固定失效期限
+supersedes: []                                   # 未取代先前文件
+superseded_by: null                              # 未被取代
+amends: []                                       # 未修订任何文件
+amended_by: []                                   # 未被修订
+
+# ---- 版本链 ----
+versions:
+  - version: 1                                   # 首版
+    published_on: 2021-12-31                     # 公布日期
+    effective_from: 2022-03-01                   # 生效日期
+    effective_until: null                        # 尚未失效
+    status: effective                            # 现行有效
+    url: https://www.cac.gov.cn/2022-01/04/c_1642894606364259.htm  # 官方原文链接
+    archived_url: null                           # 官方页面可访问
+    content_hash: null                           # 未计算摘要
+    change_note: null                            # 首版
+
+# ---- 来源溯源 ----
+source:
+  url: https://www.cac.gov.cn/2022-01/04/c_1642894606364259.htm  # 官方原文链接
+  site: cac.gov.cn                               # 来源站点
+  tier: primary                                  # 官方原始渠道
+  fetched_at: 2026-10-03T12:00:00+08:00          # 整理时间
+  http_status: null                              # 未执行抓取
+  content_hash: null                             # 未计算摘要
+  snapshot_path: null                            # 未保存快照
+
+# ---- 核验台账 ----
+last_verified: 2026-10-03                        # 最近核验日期
+verified_by: automated                           # 检索整理，尚未人工核对
+verified_note: 公布日期 2021-12-31、施行日期 2022-03-01 为通行表述，详情页 URL 待人工确认。
+
+# ---- 适用主体 ----
+applicable_to:                                   # 原文明确的适用主体
+  - 应用算法推荐技术提供互联网信息服务的服务提供者     # 主要适用主体
+
+# ---- 关键义务 ----
+key_obligations:
+  - clause: 第十一条                               # 条款定位
+    summary: 应加强算法推荐服务版面页面生态管理，建立完善人工干预和用户自主选择机制，在首页首屏、热搜、精选、榜单类、弹窗等重点环节积极呈现符合主流价值导向的信息
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - human-oversight                            # 人工干预机制
+      - disclosure                                 # 版面管理
+
+  - clause: 第十二条                               # 条款定位
+    summary: 鼓励综合运用内容去重、打散干预等策略，并优化检索、排序、选择、推送、展示等规则的透明度和可解释性
+    obligation_type: encouraged                    # 鼓励性条款
+    tags:
+      - explainability                             # 算法可解释性
+
+  - clause: 第十五条                               # 条款定位
+    summary: 应向用户提供选择或删除针对其个人特征的算法推荐服务的选项；提供便捷的关闭算法推荐服务选项，用户选择关闭时应立即停止提供相关服务
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - consumer-protection                        # 用户选择权
+      - disclosure                                 # 关闭选项
+
+  - clause: 第十六条                               # 条款定位
+    summary: 应向用户提供算法推荐服务情况的说明，告知用户其提供算法推荐服务的情况，并以适当方式公示算法推荐服务的基本原理、目的意图和主要运行机制
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - disclosure                                 # 算法公示
+
+  - clause: 第十七条                               # 条款定位
+    summary: 应向用户提供不针对其个人特征的选项，或提供便捷的拒绝方式
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - consumer-protection                        # 拒绝权
+
+  - clause: 第二十一条                             # 条款定位
+    summary: 不得根据消费者的偏好、交易习惯等特征，利用算法在交易价格等交易条件上实施不合理的差别待遇
+    obligation_type: prohibition                   # 禁止性要求（大数据杀熟）
+    tags:
+      - bias-and-fairness                          # 差别待遇禁止
+      - consumer-protection                        # 金融消费者保护
+
+  - clause: 第二十四条                             # 条款定位
+    summary: 具有舆论属性或社会动员能力的算法推荐服务提供者应当在服务上线后十个工作日内，通过互联网信息服务算法备案系统填报服务提供者的名称、服务形式、应用领域、算法类型等信息，履行算法备案手续
+    obligation_type: requires-reporting            # 需备案
+    tags:
+      - algorithm-filing                           # 算法备案（最核心义务）
+      - supervision-and-reporting                  # 备案时限
+
+  - clause: 第二十五条                             # 条款定位
+    summary: 具有舆论属性或社会动员能力的算法推荐服务提供者应当按规定开展安全评估，对评估中发现的问题及时整改
+    obligation_type: requires-assessment           # 需安全评估
+    tags:
+      - supervision-and-reporting                  # 安全评估
+
+# ---- 其它 ----
+language: zh-CN                                  # 正文语言
+tags:                                            # 自由标签
+  - 网信办牵头                                    # 发文机关特征
+  - 四部门联合发布                                 # 发文形式
+  - 算法备案制度源头                                # 定位标注
+  - 上位依据                                      # 后续多项规定的依据
+notes: 共三十五条。这是中国 AI 监管体系中最早确立算法备案制度的规章，后续《互联网信息服务深度合成管理规定》《生成式人工智能服务管理暂行办法》《人工智能生成合成内容标识办法》均以本规定为立法依据之一。对金融机构的意义：①第二十一条禁止「不合理差别待遇」，直接针对金融产品差异化定价，是智能定价场景的合规红线；②第十五至十七条要求提供关闭个性化推荐的选项并公示算法基本原理，适用于金融机构 App 的智能推荐模块；③第二十四条的算法备案义务是网信办备案体系的入口，金融机构若推荐算法具备舆论属性或社会动员能力，需上线后十个工作日内备案。

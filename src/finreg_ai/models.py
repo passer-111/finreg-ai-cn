@@ -1,0 +1,920 @@
+"""数据模型 —— 政策记录、版本、来源、数据源的带类型表示。
+
+为什么不用裸字典
+----------------
+政策记录有 20 多个字段，其中一半是时效性字段（status / effective_from /
+effective_until / supersedes / superseded_by / last_verified 等）。
+如果用裸字典，一处 ``rec["effectiv_from"]`` 的拼写错误要到运行时才暴露，
+而且 YAML 里多写的字段会被静默忽略——这对合规数据是不可接受的。
+因此这里用 dataclass + Enum 把结构固化，配合 JSON Schema 做双重校验：
+
+- JSON Schema 校验 YAML 文件的**形状**（类型、枚举、格式）
+- dataclass 提供**代码层的类型安全**与**业务规则校验**（如版本链一致性）
+
+两者职责不重复：schema 保证「文件长得对」，dataclass 保证「业务上讲得通」。
+"""
+
+# 导入 dataclass 相关工具：dataclass 装饰器、字段默认值标记、字典转对象
+from dataclasses import dataclass, field
+# 导入日期与时间类型，用于类型标注与归一化。
+# 需要 datetime 的原因是 PyYAML 会把不带引号的 ISO 时间戳解析成 datetime，
+# 而归一化函数必须先识别出这种类型（datetime 是 date 的子类，判断顺序有讲究）。
+from datetime import date, datetime
+# 导入枚举基类，用于定义受控取值
+from enum import Enum
+# 导入任意类型标注，用于承载自由格式字段
+from typing import Any
+
+
+# ============================================================
+# 枚举定义 —— 受控取值，防止自由发挥导致数据在半年后退化
+# ============================================================
+
+class PolicyStatus(str, Enum):
+    """政策的法律状态。
+
+    这是整个模型中最重要的枚举：用户来查知识库，第一个要问的就是
+    「这条现在还有效吗」。因此取值必须由核验得出，严禁推测。
+    """
+
+    # 起草阶段，尚未公开征求意见
+    DRAFT = "draft"
+    # 已发布征求意见稿，尚未定稿生效
+    CONSULTATION = "consultation"
+    # 已正式公布，但生效日期尚未到达
+    PUBLISHED = "published"
+    # 现行有效，处于生效期内
+    EFFECTIVE = "effective"
+    # 部分条款生效，或已部分失效
+    PARTIALLY_EFFECTIVE = "partially_effective"
+    # 已被修订，修订后版本现行有效（须通过 amended_by 指向新版本）
+    AMENDED = "amended"
+    # 已被明文废止
+    REPEALED = "repealed"
+    # 已被新文件取代但未明文废止（新文件通过 supersedes 反向指向本条）
+    SUPERSEDED = "superseded"
+    # 有效期届满自动失效
+    EXPIRED = "expired"
+    # 无法确认状态，须在 verified_note 中说明核验过程与障碍
+    UNKNOWN = "unknown"
+
+    @property
+    def is_currently_valid(self) -> bool:
+        """判断该状态是否表示「当前具有法律效力」。
+
+        用途：流水线筛出「当前有效」的政策子集，供合规自查工具消费。
+        注意 ``AMENDED`` 与 ``PARTIALLY_EFFECTIVE`` 也算有效——
+        它们是「有效但需注意版本」，与「已废止」有本质区别。
+        """
+        # 这些状态都意味着政策当前仍在发挥作用
+        return self in {
+            PolicyStatus.EFFECTIVE,            # 完整有效
+            PolicyStatus.PARTIALLY_EFFECTIVE,  # 部分有效
+            PolicyStatus.AMENDED,              # 已修订，新版有效
+        }
+
+    @property
+    def is_terminal(self) -> bool:
+        """判断该状态是否为「终态」——即该文件已彻底退出法律生命。
+
+        用途：变更检测时判断是否需要为这条记录继续寻找取代者。
+        已废止的文件不需要再追踪后续变化。
+        """
+        # 这些状态表示文件已不再产生任何法律效果
+        return self in {
+            PolicyStatus.REPEALED,    # 已废止
+            PolicyStatus.SUPERSEDED,  # 已被取代
+            PolicyStatus.EXPIRED,     # 已过期
+        }
+
+
+class Bindingness(str, Enum):
+    """约束力性质。
+
+    与 ``InstrumentType`` 正交：``InstrumentType`` 回答「这是什么级别的文件」，
+    ``Bindingness`` 回答「它是否产生强制义务」。
+
+    这个区分在实务中极其重要：一份「指导意见」在文件层级上只是部门规范性文件，
+    但其正文中的「须」「不得」「严禁」等表述对应实质义务，
+    违反同样会招致监管措施。只看文件层级会严重低估合规压力。
+    """
+
+    # 产生强制法律义务，违反面临行政处罚或监管措施
+    BINDING = "binding"
+    # 不直接设定义务，但构成监管预期，实践中具有事实约束力
+    SOFT_LAW = "soft-law"
+    # 鼓励性与倡导性表述，无强制力
+    GUIDANCE = "guidance"
+    # 征求意见阶段，尚未生效，不产生任何义务
+    CONSULTATION = "consultation"
+
+
+class InstrumentType(str, Enum):
+    """文件效力层级，由高到低排列。
+
+    这是判断约束力的第一依据，也决定了它能否作为合规主张的法律基础。
+    """
+
+    # 全国人大及其常委会制定，效力最高
+    LAW = "法律"
+    # 国务院制定
+    ADMINISTRATIVE_REGULATION = "行政法规"
+    # 国务院部门制定，经部门首长签署公布
+    DEPARTMENT_RULE = "部门规章"
+    # 国务院部门制定的具有普遍约束力的文件，程序要求低于部门规章
+    DEPARTMENT_NORMATIVE = "部门规范性文件"
+    # 交易所、行业协会等自律组织制定
+    INDUSTRY_SELF_REGULATION = "行业自律规则"
+    # 国家标准，本身不设法律义务
+    NATIONAL_STANDARD = "国家标准"
+    # 地方人大或地方政府制定
+    LOCAL_DOCUMENT = "地方性文件"
+    # 无法归入上述类别
+    OTHER = "其他"
+
+
+class AIRelevance(str, Enum):
+    """与 AI 合规主题的相关度，用于筛选与排序。
+
+    这个字段决定了一条记录在检索结果中的权重：
+    ``CORE`` 是用户真正需要的，``BACKGROUND`` 只提供上下文。
+    """
+
+    # 主体内容直接规范 AI 的开发或应用
+    CORE = "core"
+    # 部分条款涉及 AI
+    RELATED = "related"
+    # 仅提供上位法背景（如网络安全法之于 AI 合规）
+    BACKGROUND = "background"
+
+
+class SourceTier(str, Enum):
+    """来源权威等级。
+
+    ``PRIMARY`` 是唯一允许写入政策记录的等级。
+    ``SECONDARY`` 仅可用于发现线索，其内容不得进入任何记录字段——
+    这是为了规避第三方汇编作品的著作权风险，也为了保证可追溯性。
+    """
+
+    # 官方原始发布渠道
+    PRIMARY = "primary"
+    # 第三方转载、律所解读等
+    SECONDARY = "secondary"
+    # 来源不明，一律不采用
+    UNVERIFIED = "unverified"
+
+
+class VerifiedBy(str, Enum):
+    """最近一次核验的执行方式。
+
+    这个字段的存在是为了让使用者能判断记录可信度：
+    ``AUTOMATED`` 表示仅由爬虫确认页面可访问且内容哈希未变，
+    ``HUMAN`` 表示已由人工打开官方页面逐项核对状态字段。
+    """
+
+    # 人工核验
+    HUMAN = "human"
+    # 自动核验
+    AUTOMATED = "automated"
+
+
+# ============================================================
+# 问题严重级别
+# ============================================================
+#
+# 校验器需要区分「错误」与「警告」，因为对合规数据而言，
+# 「不知道」与「写错了」是两种完全不同的问题：
+#
+# - **错误**：数据自相矛盾或违反硬性约束（如失效日期早于生效日期）。
+#   这类问题会让使用者得出错误结论，必须阻断入库。
+#
+# - **警告**：数据本身可信，但存在已知的不完整或待办事项
+#   （如现行有效但施行日期无法确认）。
+#   这类问题不应阻断入库——否则维护者会被迫编造一个日期来让校验通过，
+#   那反而制造了虚假信息。
+#
+# 实现方式用字符串前缀而非自定义异常类，是为了让问题列表保持
+# 可读的纯文本形式，便于直接打印到 CI 日志与终端。
+WARNING_PREFIX = "[警告]"
+
+
+def is_warning(issue: str) -> bool:
+    """判断一条校验问题是否为警告级别。
+
+    供调用方决定是阻断流程还是仅提示。
+    """
+    # 检查前缀
+    return issue.startswith(WARNING_PREFIX)
+
+
+def strip_warning_prefix(issue: str) -> str:
+    """去掉警告前缀，返回可读的问题描述。"""
+    # 有前缀则去掉，无前缀原样返回
+    if issue.startswith(WARNING_PREFIX):
+        # 去掉前缀并清理多余空格
+        return issue[len(WARNING_PREFIX) :].strip()
+    # 原样返回
+    return issue
+
+
+def with_location(issue: str, location: str) -> str:
+    """给问题描述附上位置信息（如文件名），并保证警告标记始终在最前。
+
+    为什么需要这个专门的函数：警告级别是靠字符串前缀识别的，
+    如果简单地把位置信息拼在最前面（``f"{location}: {issue}"``），
+    警告标记就会被挤到中间，``is_warning()`` 便无法识别，
+    结果是一条「警告」被当成「错误」处理——整个分级机制静默失效。
+
+    这类「因为字符串拼接顺序导致逻辑失效」的问题很难通过肉眼 review 发现，
+    因此把它收进一个函数，让正确做法成为唯一做法。
+    """
+    # 警告级问题：保持前缀在最前，位置信息插在其后
+    if is_warning(issue):
+        # 剥离原前缀后重新组合
+        return f"{WARNING_PREFIX} {location}: {strip_warning_prefix(issue)}"
+    # 错误级问题：位置信息直接前置
+    return f"{location}: {issue}"
+
+
+# ============================================================
+# 值对象 —— 嵌套结构
+# ============================================================
+
+@dataclass
+class Version:
+    """政策的一个版本。
+
+    为什么需要版本链而不是只保留最新版
+    ----------------------------------
+    「政策被修订」在合规场景中是高频事件，但绝大多数知识库只保留最新版，
+    导致无法追溯历史义务。而合规审查恰恰经常需要判断
+    「当时适用的是哪一版，当时的义务是什么」。
+    因此每个版本都独立记录，并在顶层通过 supersedes/superseded_by 串联。
+    """
+
+    # 版本序号，从 1 开始递增，不可跳号
+    version: int
+    # 该版本公布日期
+    published_on: date
+    # 该版本自身在其存续期内的状态；历史版本通常为 superseded
+    status: PolicyStatus
+    # 该版本官方原文链接，必须指向官方站点
+    url: str
+    # 该版本生效起始日期；征求意见稿版本为 None
+    effective_from: date | None = None
+    # 该版本失效日期；下一个版本生效之日或废止之日
+    effective_until: date | None = None
+    # 官方页面已不可访问时的存档链接
+    archived_url: str | None = None
+    # 正文 SHA-256 摘要，格式 sha256:<64位十六进制>
+    content_hash: str | None = None
+    # 相对上一版本的主要变化，人工提炼，禁止 LLM 生成后不经复核写入
+    change_note: str | None = None
+
+
+@dataclass
+class SourceRef:
+    """记录中的来源溯源信息。
+
+    每条记录都必须能追溯到官方页面，且带有可复核的时间戳与内容指纹。
+    没有这一层，知识库就退化为不可验证的传言集合。
+    """
+
+    # 官方原文链接（最新版本的页面地址）
+    url: str
+    # 来源站点域名，用于按源统计与失效排查
+    site: str
+    # 抓取时间，ISO 8601 带时区偏移
+    fetched_at: str
+    # 来源权威等级，默认 primary
+    tier: SourceTier = SourceTier.PRIMARY
+    # 抓取时的 HTTP 状态码；非 200 说明官方页面可能异常
+    http_status: int | None = None
+    # 抓取到的正文 SHA-256 摘要
+    content_hash: str | None = None
+    # 仓库内原始快照的相对路径
+    snapshot_path: str | None = None
+
+
+@dataclass
+class KeyObligation:
+    """从政策原文中人工提炼的一条关键义务。
+
+    这是本项目与纯爬虫项目的核心区别：爬虫只能给你原文，
+    提炼才能给你可执行的义务清单。也因此每条义务都必须能对应到原文的具体条款，
+    禁止无出处的概括。
+    """
+
+    # 原文条款定位，如「十六」「第 16 条」，必须与原文标号一致
+    clause: str
+    # 义务内容概括，一句话说清「谁必须做什么」；人工撰写，非 AI 摘要
+    summary: str
+    # 义务类型，用于聚合统计；为 None 表示尚未归类
+    obligation_type: str | None = None
+    # 该义务涉及的主题标签
+    tags: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Issuer:
+    """发布机构。
+
+    这个模型的存在是为了消除同一机构的多种写法。
+    如果不同贡献者分别写成「国家金融监督管理总局」和「金融监管总局」，
+    检索就会漏结果——这是知识库最常见的静默失效。
+    """
+
+    # 机构短代码，用作政策 id 前缀
+    code: str
+    # 机构官方全称，写入政策记录的 issuer 字段时须使用此值
+    name: str
+    # 机构官方网站域名，用于校验政策记录的 source.site
+    domain: str
+    # 机构官网首页地址
+    homepage: str
+    # 机构在监管体系中的层级，决定其发布文件的效力上限
+    authority_level: str
+    # 常用简称，仅用于显示与检索，不得写入政策记录
+    abbr: str | None = None
+    # 机构备注，例如改名历史、合并情况、网站改版记录
+    notes: str | None = None
+
+
+@dataclass
+class Source:
+    """数据源配置。
+
+    每个数据源对应一个可抓取的官方列表页或栏目。
+    把源当作一等公民单独建模，而不是把 URL 硬编码在抓取器里，
+    是因为政府网站会改版、会下架、会合并——
+    当某个源失效时，我们希望只改 YAML，不改代码、不发版。
+    """
+
+    # 数据源唯一标识，用于变更流与日志中定位问题源
+    id: str
+    # 所属机构代码，必须存在于 issuers 列表中
+    issuer_code: str
+    # 数据源的中文名称，说明这是哪个栏目
+    name: str
+    # 来源权威等级
+    tier: SourceTier
+    # 是否启用；置为 false 时流水线跳过并记录，而不是反复失败
+    enabled: bool
+    # 使用的抓取器类型
+    fetcher: str
+    # 列表页地址；manual 类型可为 None
+    list_url: str | None = None
+    # 建议抓取频率，cron 表达式，供流水线调度参考
+    schedule: str = "0 6 * * *"
+    # 同一源内请求之间的最小间隔秒数，对监管机构服务器的基本礼貌
+    min_interval_seconds: float = 3
+    # 分页配置；None 表示不分页
+    pagination: dict[str, Any] | None = None
+    # CSS 选择器配置，供通用抓取器使用。
+    # 值可以是 None：实测配置里 ``date: null`` 是有意义的写法，
+    # 表示「该列表页不显示日期」。若把值类型写成 str，
+    # 这个合法用法就会被类型系统误判为非法。
+    selectors: dict[str, str | None] | None = None
+    # JSON 接口配置，供 json_search_list 抓取器使用。
+    # 实测发现中国政府监管网站的列表页绝大多数为 JS 渲染，
+    # HTML 选择器方案拿不到条目，必须走内部 JSON 接口。
+    # 因此这个配置项的实际使用频率高于 selectors。
+    api: dict[str, Any] | None = None
+    # 关键词过滤规则
+    filters: dict[str, Any] | None = None
+    # 数据源备注：已知的网络可达性问题、反爬情况、结构变更历史
+    notes: str | None = None
+
+
+# ============================================================
+# 聚合根 —— 政策记录
+# ============================================================
+
+@dataclass
+class Policy:
+    """一条完整的金融 AI 合规政策记录。
+
+    字段分成四组，分组顺序反映了重要性：
+    1. **身份**（id / title / issuer / doc_number）—— 这是什么文件
+    2. **效力**（instrument_type / bindingness / ai_relevance）—— 有多大约束力
+    3. **时效**（status / effective_from / effective_until / 版本链）—— 现在是否有效
+    4. **溯源**（source / last_verified / verified_by）—— 凭什么这么说
+
+    第 3、4 组是本项目的立身之本，也是竞品普遍缺失的部分。
+    """
+
+    # ---- 第 1 组：身份 ----
+
+    # 全局唯一稳定标识符，格式 <issuer_code>-<年份>-<语义化短名>
+    id: str
+    # 政策的中文官方全称，必须与官方发布页标题完全一致
+    title: str
+    # 发布机构的官方全称；多部门联合发布时用顿号分隔
+    issuer: str
+    # 所属法域，MVP 阶段固定为 CN
+    jurisdiction: str
+    # 文件效力层级
+    instrument_type: InstrumentType
+    # 约束力性质
+    bindingness: Bindingness
+    # 与 AI 合规主题的相关度
+    ai_relevance: AIRelevance
+    # 所属领域，至少一项
+    domain: list[str]
+    # 官方公布日期
+    published_on: date
+    # 来源溯源信息
+    source: SourceRef
+    # 最近一次核验该记录状态的日期
+    last_verified: date
+    # 最近一次核验的执行方式
+    verified_by: VerifiedBy
+    # 版本历史，至少一条
+    versions: list[Version]
+
+    # ---- 第 2 组：效力 ----
+
+    # 当前法律状态
+    status: PolicyStatus = PolicyStatus.UNKNOWN
+    # 发布机构短代码
+    issuer_code: str | None = None
+    # 官方发文字号，如「银发〔2023〕89号」
+    doc_number: str | None = None
+    # 英文标题，仅在中国官方发布英文版时填写官方译名
+    title_en: str | None = None
+    # 法域细分层级，用于地方性文件
+    jurisdiction_detail: str | None = None
+    # 主题标签，取值来自受控词表
+    topics: list[str] = field(default_factory=list)
+    # 适用主体清单
+    applicable_to: list[str] = field(default_factory=list)
+    # 关键义务条目
+    key_obligations: list[KeyObligation] = field(default_factory=list)
+
+    # ---- 第 3 组：时效 ----
+
+    # 生效起始日期；尚未定稿的文件为 None
+    effective_from: date | None = None
+    # 失效日期；多数文件为 None，需靠主动核验确认状态
+    effective_until: date | None = None
+    # 本条取代了哪些先前文件（向后指针）
+    supersedes: list[str] = field(default_factory=list)
+    # 本条被哪个文件取代（向前指针）
+    superseded_by: str | None = None
+    # 本条修订了哪些文件
+    amends: list[str] = field(default_factory=list)
+    # 本条被哪些文件修订过
+    amended_by: list[str] = field(default_factory=list)
+
+    # ---- 第 4 组：其它 ----
+
+    # 核验过程说明，status 为 unknown 或核验遇阻时必须填写
+    verified_note: str | None = None
+    # 正文语言，BCP 47 标签
+    language: str = "zh-CN"
+    # 自由标签，与受控词表 topics 分开管理
+    tags: list[str] = field(default_factory=list)
+    # 补充说明
+    notes: str | None = None
+
+    # --------------------------------------------------------
+    # 业务规则校验 —— 这些规则是 JSON Schema 表达不了的
+    # --------------------------------------------------------
+
+    def validate_semantics(self) -> list[str]:
+        """校验业务语义规则，返回问题描述列表（空列表表示通过）。
+
+        为什么要单独做语义校验：JSON Schema 能验证「字段类型对不对」，
+        但验证不了「状态与日期的组合讲不讲得通」。例如：
+        - 一条已废止的文件不应该有未来的生效日期
+        - 征求意见稿不应该有生效日期
+        - 声称被某文件取代，就必须能在库中找到那个文件（跨记录校验）
+
+        前两类在此实现，跨记录校验由 pipeline 统一执行。
+        """
+        # 收集所有问题描述
+        problems: list[str] = []
+
+        # 规则 1：征求意见稿与草稿不应有生效日期
+        if self.status in (PolicyStatus.CONSULTATION, PolicyStatus.DRAFT) and self.effective_from is not None:
+            # 记录违规：未定稿却填了生效日
+            problems.append(
+                f"[{self.id}] status={self.status.value} 表示尚未定稿，但 effective_from={self.effective_from} 已填写"
+            )
+
+        # 规则 2：生效日期不应早于公布日期（例外：追溯生效，但必须说明）
+        if self.effective_from is not None and self.effective_from < self.published_on:
+            # 追溯生效在实务中存在，因此只提示而非判错，要求补充说明
+            if not self.notes or "追溯" not in (self.notes or ""):
+                problems.append(
+                    f"[{self.id}] effective_from({self.effective_from}) 早于 published_on({self.published_on})，"
+                    f"若属追溯生效请在 notes 中说明"
+                )
+
+        # 规则 3：失效日期不应早于生效日期
+        if (
+            self.effective_from is not None
+            and self.effective_until is not None
+            and self.effective_until < self.effective_from
+        ):
+            # 这是明确的逻辑矛盾，不可能出现
+            problems.append(
+                f"[{self.id}] effective_until({self.effective_until}) 早于 effective_from({self.effective_from})，逻辑矛盾"
+            )
+
+        # 规则 4：status 与 effective_until 应一致
+        if self.status == PolicyStatus.EXPIRED and self.effective_until is None:
+            # 声称已过期，却没说什么时候过期——无法核验
+            problems.append(f"[{self.id}] status=expired 但未填写 effective_until，无法核验失效时点")
+
+        # 规则 5：status=unknown 时必须说明原因
+        if self.status == PolicyStatus.UNKNOWN and not self.verified_note:
+            # 这个字段的价值就在于「把未知显式化」，而不是让未知看起来像已知
+            problems.append(f"[{self.id}] status=unknown 但未填写 verified_note 说明核验障碍")
+
+        # 规则 6：被取代就必须指明取代者
+        if self.status == PolicyStatus.SUPERSEDED and not self.superseded_by:
+            # 没有取代者的「已被取代」是自相矛盾的表述
+            problems.append(f"[{self.id}] status=superseded 但未填写 superseded_by")
+
+        # 规则 7：版本链必须从 1 开始且连续
+        if self.versions:
+            # 提取所有版本号并排序
+            numbers = sorted(v.version for v in self.versions)
+            # 期望的版本号序列
+            expected = list(range(1, len(numbers) + 1))
+            # 比对实际与期望
+            if numbers != expected:
+                # 跳号或重复会导致版本链断裂，无法追溯
+                problems.append(f"[{self.id}] 版本号不连续或重复：实际 {numbers}，期望 {expected}")
+
+        # 规则 8：非终态、非未定稿的政策，应有生效日期。
+        # 这条是**警告**而非错误。原因：现实工作中确实存在「已确认政策现行有效，
+        # 但无法取得确切施行日期」的情况（官方原文未载明施行条款、
+        # 或原文页面不可访问）。若判为错误，维护者会被迫编造一个日期来让校验通过——
+        # 那才是对数据质量真正的伤害。因此这里要求的是「显式承认不知道」，
+        # 而非「必须知道」。
+        if self.status in (PolicyStatus.EFFECTIVE, PolicyStatus.PARTIALLY_EFFECTIVE) and self.effective_from is None:
+            # 提示补充日期，或说明为何无法确认
+            problems.append(
+                f"{WARNING_PREFIX} [{self.id}] status={self.status.value}（现行有效）但未填写 effective_from"
+                f" —— 请在 verified_note 中说明为何无法确认施行日期"
+            )
+
+        # 规则 10：未标明核验方式为人工时，提示该记录尚未经人工复核。
+        # 这同样是警告：自动化整理的记录有价值，但使用者需要知道
+        # 它与人工核验过的记录在可信度上存在差异。
+        if self.verified_by == VerifiedBy.AUTOMATED and self.status.is_currently_valid:
+            # 提示记录尚未人工核验
+            problems.append(
+                f"{WARNING_PREFIX} [{self.id}] 现行有效但尚未经人工核验（verified_by=automated）"
+                f" —— 建议打开官方页面逐项核对状态字段"
+            )
+
+        # 规则 9：source.tier 必须为 primary
+        if self.source.tier != SourceTier.PRIMARY:
+            # 本项目只允许官方原始来源进入记录
+            problems.append(f"[{self.id}] source.tier={self.source.tier.value}，本项目只允许 primary 来源")
+
+        # 返回全部问题
+        return problems
+
+    @property
+    def latest_version(self) -> Version | None:
+        """返回版本号最大的版本；无版本时返回 None。
+
+        用途：生成变更流时对比的是最新版本，而非任意版本。
+        """
+        # 无版本记录时直接返回 None，避免 max() 抛异常
+        if not self.versions:
+            return None
+        # 按版本号取最大者
+        return max(self.versions, key=lambda v: v.version)
+
+    def days_since_verified(self, today: date) -> int:
+        """计算距上次核验已过去多少天。
+
+        参数 today 由调用方传入而非内部取 ``date.today()``，
+        目的是让测试可以注入固定日期，避免测试结果随时间漂移。
+        """
+        # 用传入的基准日期减去最近核验日期
+        return (today - self.last_verified).days
+
+
+# ============================================================
+# 字典 <-> 对象的转换工具
+# ============================================================
+
+def _parse_date(value: Any) -> date | None:
+    """把 YAML 中读出的日期值统一转成 ``date`` 对象。
+
+    为什么需要这个函数：PyYAML 会自动把 ``2026-06-18`` 解析为 ``datetime.date``，
+    但把 ``2026-6-18`` 解析为 ``str``，把空值解析为 ``None``。
+    如果不做归一化，下游代码就必须到处写 isinstance 判断。
+    """
+    # datetime 必须先行处理，因为它是 date 的子类（isinstance 判断会误命中）。
+    # 场景：贡献者写 ``effective_from: 2026-07-01T09:00:00+08:00``，
+    # PyYAML 会给出一个 datetime。而本项目这些字段的语义是「日期」而非
+    # 「时刻」——政策在一天之内生效，不存在按小时生效的情形。
+    # 因此这里取日期部分。若不处理，datetime 会被原样存进对象，
+    # 之后导出 JSON 时既无法序列化，也会让日期字段混入时间部分。
+    if isinstance(value, datetime):
+        # 取日期部分
+        return value.date()
+    # 已经是 date 对象则直接返回（PyYAML 的常见行为）
+    if isinstance(value, date):
+        return value
+    # 空值返回 None
+    if value is None:
+        return None
+    # 字符串则按 ISO 格式解析
+    if isinstance(value, str):
+        # 按 YYYY-MM-DD 解析；解析失败抛出明确错误而非静默返回 None
+        try:
+            # 使用 fromisoformat 并要求恰好 10 位，避免接受模糊格式
+            return date.fromisoformat(value.strip()[:10])
+        except ValueError as exc:
+            # 抛出带上下文信息的异常，便于定位是哪条数据出错
+            raise ValueError(f"无法解析日期 {value!r}：{exc}") from exc
+    # 其它类型明确报错，不猜测
+    raise TypeError(f"不支持的日期类型 {type(value).__name__}：{value!r}")
+
+
+def _parse_text(value: Any) -> str | None:
+    """把 YAML 中读出的值统一转成字符串（或 None）。
+
+    为什么需要这个函数：YAML 的隐式类型推断会「好心办坏事」。
+    ``fetched_at: 2026-10-03T12:00:00+08:00`` 不加引号时，PyYAML 会
+    把它解析成 ``datetime`` 对象，而字段声明的类型是 ``str``——
+    于是对象里存着一个类型不符的值。
+
+    这个问题曾经真实发生过，且很难发现：JSON Schema 校验会因为
+    ``normalize_for_validation`` 提前把日期转成字符串而通过，
+    但对象内部的类型仍然是错的，直到某天有人导出 JSON 才崩在
+    ``TypeError: Object of type datetime is not JSON serializable``。
+
+    处理方式与日期归一化一致：与其要求贡献者记得给时间戳加引号
+    （反直觉、必然遗忘），不如在转换层统一处理。
+    """
+    # 空值保持 None
+    if value is None:
+        # 无值
+        return None
+    # 已经是字符串则原样返回
+    if isinstance(value, str):
+        # 直接返回
+        return value
+    # 日期与时间转成 ISO 字符串（保留时区偏移）
+    if isinstance(value, datetime | date):
+        # 格式化输出
+        return value.isoformat()
+    # 其它标量类型（如数字）转字符串，避免类型不符
+    return str(value)
+
+
+def _parse_date_required(value: Any, field: str) -> date:
+    """解析**必填**日期字段，无法解析时抛异常而非返回 None。
+
+    为什么需要单独一个函数：``_parse_date`` 的返回类型是 ``date | None``，
+    因为 ``effective_until`` 这类字段「没有值」是完全正常的状态。
+    但 ``published_on``、``last_verified`` 不是——一条政策如果连
+    「什么时候发布的」「上次核验是在什么时候」都不知道，
+    它在本项目里的存在意义就为零。
+
+    早期实现让这几个必填字段共用 ``_parse_date``，于是类型上
+    允许 ``None`` 漏进来。JSON Schema 虽然有 required 约束，
+    但校验发生在对象构造之后；对象内部先存了一个 None，
+    这个「先污染后检查」的顺序很危险。
+
+    因此这里的选择是：**在构造对象的那一刻就失败**，
+    并且报错信息里带上字段名，让人一眼知道该去改哪个 YAML 字段。
+    异常由 ``store.load_all_policies`` 捕获并归入该文件的错误列表，
+    不会让整批数据加载中断。
+    """
+    # 复用通用解析逻辑
+    parsed = _parse_date(value)
+    # 解析不出结果说明字段缺失或格式非法，明确报错
+    if parsed is None:
+        # 抛出带字段名的错误，便于定位到具体 YAML 行
+        raise ValueError(f"必填日期字段 {field} 缺失或无法解析：{value!r}")
+    # 返回确认非空的日期
+    return parsed
+
+
+def policy_from_dict(data: dict[str, Any]) -> Policy:
+    """把 YAML 读出的字典转换成 ``Policy`` 对象。
+
+    转换过程中会做类型归一化（日期、枚举、嵌套对象）。
+    任何缺失的必填字段都会抛出异常，而不是静默取默认值——
+    因为对合规数据而言，「字段缺失」比「程序崩溃」危险得多。
+    具体而言：字段整个不存在时抛 ``KeyError``；
+    字段存在但内容无法解析（如日期写成「待定」）时抛 ``ValueError``。
+    两者都由 ``store.load_all_policies`` 捕获并记入该文件的错误列表。
+    """
+    # 版本列表：逐项转成 Version 对象
+    versions = [
+        Version(
+            version=int(v["version"]),                          # 版本号转整数
+            published_on=_parse_date_required(v["published_on"], "versions[].published_on"),  # 公布日期（必填）
+            status=PolicyStatus(v["status"]),                  # 状态转枚举
+            url=v["url"],                                      # 原文链接
+            effective_from=_parse_date(v.get("effective_from")),   # 生效日
+            effective_until=_parse_date(v.get("effective_until")), # 失效日
+            archived_url=v.get("archived_url"),                # 存档链接
+            content_hash=v.get("content_hash"),                # 内容哈希
+            change_note=v.get("change_note"),                  # 变更说明
+        )
+        for v in data.get("versions", [])                          # 缺省为空列表
+    ]
+
+    # 来源溯源信息：从嵌套字典构造
+    src = data["source"]                                                    # 必填字段，缺失即报错
+    source_ref = SourceRef(
+        url=_parse_text(src["url"]) or "",                                  # 官方链接
+        site=_parse_text(src["site"]) or "",                                # 站点域名
+        # 抓取时间经 _parse_text 归一化为字符串：YAML 中不带引号的
+        # 2026-10-03T12:00:00+08:00 会被解析成 datetime 对象，
+        # 若不归一化，对象里就会存一个类型与声明不符的值（见 _parse_text 说明）
+        fetched_at=_parse_text(src["fetched_at"]) or "",                    # 抓取时间
+        tier=SourceTier(src.get("tier", "primary")),                        # 来源等级，默认 primary
+        http_status=src.get("http_status"),                                 # HTTP 状态码
+        content_hash=_parse_text(src.get("content_hash")),                  # 内容哈希
+        snapshot_path=_parse_text(src.get("snapshot_path")),                # 快照路径
+    )
+
+    # 关键义务列表：逐项转换
+    obligations = [
+        KeyObligation(
+            clause=o["clause"],                      # 条款定位
+            summary=o["summary"],                    # 义务概括
+            obligation_type=o.get("obligation_type"), # 义务类型
+            tags=list(o.get("tags", [])),            # 主题标签
+        )
+        for o in data.get("key_obligations", [])      # 缺省为空列表
+    ]
+
+    # 构造 Policy 对象，逐个字段做类型转换
+    return Policy(
+        # ---- 身份 ----
+        id=data["id"],                                          # 唯一标识
+        title=data["title"],                                    # 中文官方全称
+        issuer=data["issuer"],                                  # 发布机构全称
+        jurisdiction=data["jurisdiction"],                      # 法域
+        instrument_type=InstrumentType(data["instrument_type"]),# 文件层级转枚举
+        bindingness=Bindingness(data["bindingness"]),           # 约束力转枚举
+        ai_relevance=AIRelevance(data["ai_relevance"]),         # AI 相关度转枚举
+        domain=list(data.get("domain", [])),                    # 所属领域
+        published_on=_parse_date_required(data["published_on"], "published_on"),  # 公布日期（必填）
+        source=source_ref,                                      # 来源溯源
+        last_verified=_parse_date_required(data["last_verified"], "last_verified"),  # 最近核验日期（必填）
+        verified_by=VerifiedBy(data["verified_by"]),            # 核验方式
+        versions=versions,                                      # 版本链
+        # ---- 效力 ----
+        status=PolicyStatus(data.get("status", "unknown")),     # 当前状态，缺省 unknown
+        issuer_code=data.get("issuer_code"),                    # 机构短代码
+        doc_number=data.get("doc_number"),                      # 发文字号
+        title_en=data.get("title_en"),                          # 英文标题
+        jurisdiction_detail=data.get("jurisdiction_detail"),    # 地方层级
+        topics=list(data.get("topics", [])),                    # 主题标签（受控词表）
+        applicable_to=list(data.get("applicable_to", [])),      # 适用主体
+        key_obligations=obligations,                            # 关键义务
+        # ---- 时效 ----
+        effective_from=_parse_date(data.get("effective_from")), # 生效日
+        effective_until=_parse_date(data.get("effective_until")),# 失效日
+        supersedes=list(data.get("supersedes", [])),            # 取代了哪些
+        superseded_by=data.get("superseded_by"),                # 被谁取代
+        amends=list(data.get("amends", [])),                    # 修订了哪些
+        amended_by=list(data.get("amended_by", [])),            # 被谁修订
+        # ---- 其它 ----
+        verified_note=data.get("verified_note"),                # 核验说明
+        language=data.get("language", "zh-CN"),                 # 语言
+        tags=list(data.get("tags", [])),                        # 自由标签
+        notes=data.get("notes"),                                # 补充说明
+    )
+
+
+def policy_to_dict(policy: Policy) -> dict[str, Any]:
+    """把 ``Policy`` 对象转回可序列化为 YAML 的字典。
+
+    转换时把 date 与 Enum 转为字符串，因为 YAML 序列化器无法直接处理它们。
+    字段顺序与 policy.schema.json 的 required 列表保持一致，
+    这样生成的 YAML 文件在 diff 时更易读。
+    """
+    # 内部小工具：把 date 或 None 转成 ISO 字符串或 None
+    def _iso(value: date | None) -> str | None:
+        """日期转 ISO 格式字符串；None 原样返回。"""
+        # 空值直接返回
+        if value is None:
+            return None
+        # 否则格式化为 YYYY-MM-DD
+        return value.isoformat()
+
+    # 构造结果字典，键顺序即为 YAML 输出顺序
+    result: dict[str, Any] = {
+        # ---- 身份 ----
+        "id": policy.id,                                                       # 唯一标识
+        "title": policy.title,                                                 # 中文标题
+        "title_en": policy.title_en,                                           # 英文标题
+        "issuer": policy.issuer,                                               # 发布机构
+        "issuer_code": policy.issuer_code,                                     # 机构代码
+        "doc_number": policy.doc_number,                                        # 发文字号
+        # ---- 法域 ----
+        "jurisdiction": policy.jurisdiction,                                    # 法域
+        "jurisdiction_detail": policy.jurisdiction_detail,                      # 地方层级
+        # ---- 效力 ----
+        "instrument_type": policy.instrument_type.value,                        # 文件层级
+        "bindingness": policy.bindingness.value,                                # 约束力
+        "ai_relevance": policy.ai_relevance.value,                              # AI 相关度
+        "domain": policy.domain,                                                # 所属领域
+        "topics": policy.topics,                                                # 主题标签
+        # ---- 时效 ----
+        "status": policy.status.value,                                          # 当前状态
+        "published_on": _iso(policy.published_on),                              # 公布日期
+        "effective_from": _iso(policy.effective_from),                          # 生效日期
+        "effective_until": _iso(policy.effective_until),                        # 失效日期
+        "supersedes": policy.supersedes,                                        # 取代了哪些
+        "superseded_by": policy.superseded_by,                                  # 被谁取代
+        "amends": policy.amends,                                                # 修订了哪些
+        "amended_by": policy.amended_by,                                        # 被谁修订
+        # ---- 版本链 ----
+        "versions": [
+            {
+                "version": v.version,                                           # 版本号
+                "published_on": _iso(v.published_on),                           # 该版公布日
+                "effective_from": _iso(v.effective_from),                       # 该版生效日
+                "effective_until": _iso(v.effective_until),                     # 该版失效日
+                "status": v.status.value,                                       # 该版状态
+                "url": v.url,                                                   # 该版原文链接
+                "archived_url": v.archived_url,                                 # 存档链接
+                "content_hash": v.content_hash,                                 # 内容哈希
+                "change_note": v.change_note,                                   # 变更说明
+            }
+            for v in policy.versions                                                 # 遍历所有版本
+        ],
+        # ---- 溯源 ----
+        "source": {
+            "url": policy.source.url,                                           # 官方链接
+            "site": policy.source.site,                                         # 站点域名
+            "tier": policy.source.tier.value,                                   # 来源等级
+            "fetched_at": policy.source.fetched_at,                             # 抓取时间
+            "http_status": policy.source.http_status,                           # HTTP 状态
+            "content_hash": policy.source.content_hash,                         # 内容哈希
+            "snapshot_path": policy.source.snapshot_path,                       # 快照路径
+        },
+        "last_verified": _iso(policy.last_verified),                             # 最近核验日期
+        "verified_by": policy.verified_by.value,                                # 核验方式
+        "verified_note": policy.verified_note,                                  # 核验说明
+        # ---- 应用 ----
+        "applicable_to": policy.applicable_to,                                  # 适用主体
+        "key_obligations": [
+            {
+                "clause": o.clause,                                             # 条款定位
+                "summary": o.summary,                                           # 义务概括
+                "obligation_type": o.obligation_type,                           # 义务类型
+                "tags": o.tags,                                                 # 主题标签
+            }
+            for o in policy.key_obligations                                          # 遍历所有义务
+        ],
+        # ---- 其它 ----
+        "language": policy.language,                                            # 语言
+        "tags": policy.tags,                                                    # 自由标签
+        "notes": policy.notes,                                                  # 补充说明
+    }
+
+    # 返回构造好的字典
+    return result
+
+
+def issuer_from_dict(data: dict[str, Any]) -> Issuer:
+    """把字典转成 ``Issuer`` 对象。"""
+    # 逐字段映射，可选字段用 get 提供默认值
+    return Issuer(
+        code=data["code"],                                  # 机构短代码
+        name=data["name"],                                  # 官方全称
+        domain=data["domain"],                              # 官网域名
+        homepage=data["homepage"],                          # 官网首页
+        authority_level=data["authority_level"],            # 机构层级
+        abbr=data.get("abbr"),                              # 常用简称
+        notes=data.get("notes"),                            # 备注
+    )
+
+
+def source_from_dict(data: dict[str, Any]) -> Source:
+    """把字典转成 ``Source`` 对象。"""
+    # 逐字段映射，可选字段用 get 提供默认值
+    return Source(
+        id=data["id"],                                                  # 源标识
+        issuer_code=data["issuer_code"],                                # 关联机构
+        name=data["name"],                                              # 源名称
+        tier=SourceTier(data.get("tier", "primary")),                   # 来源等级
+        enabled=bool(data.get("enabled", False)),                       # 是否启用
+        fetcher=data["fetcher"],                                        # 抓取器类型
+        list_url=data.get("list_url"),                                  # 列表页地址
+        schedule=data.get("schedule", "0 6 * * *"),                     # 抓取频率
+        min_interval_seconds=float(data.get("min_interval_seconds", 3)),# 请求间隔
+        pagination=data.get("pagination"),                              # 分页配置
+        selectors=data.get("selectors"),                                # 选择器配置
+        api=data.get("api"),                                            # JSON 接口配置
+        filters=data.get("filters"),                                    # 过滤规则
+        notes=data.get("notes"),                                        # 备注
+    )

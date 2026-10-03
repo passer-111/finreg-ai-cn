@@ -1,0 +1,148 @@
+# ============================================================
+# 政策记录：人工智能生成合成内容标识办法
+# ------------------------------------------------------------
+# 金融机构对客服务中若使用 AI 生成内容（营销文案、客服话术、
+# 投研摘要），即落入本办法约束范围。这是「AI 生成内容必须打标」
+# 的直接法律依据，也是金融消费者保护的前置要求。
+#
+# 记录特点：印发日期与公开发布日期不同，本记录同时保留了
+# 通知落款日期与媒体公开报道日期，避免后续核验时产生混淆。
+# ============================================================
+
+# ---- 身份标识 ----
+id: cac-2025-ai-content-labeling                        # 唯一标识
+title: 人工智能生成合成内容标识办法                       # 官方全称
+title_en: null                                          # 未查到官方英文版
+issuer: 国家互联网信息办公室、工业和信息化部、公安部、国家广播电视总局  # 四部门联合发布
+issuer_code: cac                                        # 主发文机关代码（网信办牵头）
+doc_number: 国信办通字〔2025〕2号                          # 官方发文字号
+
+# ---- 法域 ----
+jurisdiction: CN                                        # 法域：中国大陆
+jurisdiction_detail: null                               # 国家层面文件
+
+# ---- 效力判断 ----
+instrument_type: 部门规范性文件                           # 层级：四部门联合印发的规范性文件
+bindingness: binding                                    # 约束力：产生强制义务，违反由网信、电信、公安、
+                                                        # 广播电视等主管部门依法处理（见第十三条）
+ai_relevance: core                                      # 相关度：主体内容即为 AI 生成内容的标识规范
+
+# ---- 所属领域与主题 ----
+domain:                                                # 所属领域
+  - 人工智能                                             # AI 领域
+  - 金融                                                # 金融场景强相关（对客内容合规）
+  - 数据                                                # 涉及元数据与内容治理
+topics:                                                # 主题标签
+  - content-labeling                                    # 内容标识（核心主题）
+  - deep-synthesis                                      # 深度合成
+  - disclosure                                          # 透明度与信息披露
+  - consumer-protection                                 # 消费者保护
+
+# ---- 时效性 ----
+status: effective                                       # 当前状态：现行有效
+published_on: 2025-03-14                                # 公开发布日期（据中新社、光明网等媒体报道为 3 月 14 日；
+                                                        # 通知落款日期为 2025-03-07，两者不同，见 notes）
+effective_from: 2025-09-01                              # 生效日期：第十四条明确规定「自2025年9月1日起施行」
+effective_until: null                                   # 无固定失效期限
+supersedes: []                                          # 未取代任何先前文件
+superseded_by: null                                     # 未被取代
+amends: []                                              # 未修订任何文件
+amended_by: []                                          # 未被修订
+
+# ---- 版本链 ----
+versions:
+  - version: 1                                          # 首版
+    published_on: 2025-03-14                            # 公开公布日期
+    effective_from: 2025-09-01                          # 生效日期
+    effective_until: null                               # 尚未失效
+    status: effective                                   # 现行有效
+    url: https://www.cac.gov.cn/2025-03/14/c_1743654684782215.htm  # 官方原文链接
+    archived_url: null                                  # 官方页面可访问
+    content_hash: null                                  # 未计算摘要
+    change_note: null                                   # 首版
+
+# ---- 来源溯源 ----
+source:
+  url: https://www.cac.gov.cn/2025-03/14/c_1743654684782215.htm  # 官方原文链接
+  site: cac.gov.cn                                    # 来源站点
+  tier: primary                                       # 官方原始渠道
+  fetched_at: 2026-10-03T12:00:00+08:00               # 整理时间
+  http_status: null                                   # 未执行抓取
+  content_hash: null                                  # 未计算摘要
+  snapshot_path: null                                 # 未保存快照
+
+# ---- 核验台账 ----
+last_verified: 2026-10-03                              # 最近核验日期
+verified_by: automated                                 # 检索整理，尚未人工逐项核对
+verified_note: 施行日期（2025-09-01）与文号已从网信办官网原文确认。published_on 取媒体公开报道日期 2025-03-14；通知文件落款日期为 2025-03-07，两者差异属正常（文件签发与公开发布不同步），已在 notes 中说明。
+
+# ---- 适用主体 ----
+applicable_to:                                         # 原文明确的适用主体
+  - 网络信息服务提供者                                   # 开展标识活动的服务提供者
+  - 提供网络信息内容传播服务的服务提供者                  # 传播平台
+  - 互联网应用程序分发平台                                # 应用分发平台
+
+# ---- 关键义务 ----
+key_obligations:
+  - clause: 第四条                                       # 条款定位
+    summary: 对文本、音频、图片、视频、虚拟场景等生成合成内容添加显式标识；提供下载、复制、导出功能时须确保文件含有满足要求的显式标识
+    obligation_type: mandatory                          # 强制性要求
+    tags:
+      - content-labeling                                # 内容标识
+
+  - clause: 第五条                                       # 条款定位
+    summary: 须在文件元数据中添加隐式标识，包含生成合成内容属性信息、服务提供者名称或编码、内容编号等制作要素信息
+    obligation_type: mandatory                          # 强制性要求
+    tags:
+      - content-labeling                                # 隐式标识
+      - disclosure                                      # 溯源信息
+
+  - clause: 第六条                                       # 条款定位
+    summary: 传播平台须核验文件元数据中的隐式标识；未核验到隐式标识但用户声明或检测到生成痕迹的，须在内容周边添加「可能/疑似生成合成内容」提示标识
+    obligation_type: mandatory                          # 强制性要求
+    tags:
+      - content-labeling                                # 平台核验义务
+      - disclosure                                      # 提示标识
+
+  - clause: 第七条                                       # 条款定位
+    summary: 互联网应用程序分发平台在上架或上线审核时，应要求服务提供者说明是否提供生成合成服务，并提供者须核验其标识相关材料
+    obligation_type: requires-assessment                # 需开展核验
+    tags:
+      - content-labeling                                # 应用分发审核
+      - supervision-and-reporting                       # 审核义务
+
+  - clause: 第八条                                       # 条款定位
+    summary: 须在用户服务协议中明确说明生成合成内容标识的方法、样式等规范内容，并提示用户阅读理解标识管理要求
+    obligation_type: mandatory                          # 强制性要求
+    tags:
+      - disclosure                                      # 协议披露
+      - consumer-protection                             # 用户知情
+
+  - clause: 第九条                                       # 条款定位
+    summary: 用户申请无显式标识内容时，须通过用户协议明确用户的标识义务与使用责任，并依法留存提供对象信息等相关日志不少于六个月
+    obligation_type: requires-recordkeeping             # 需留存记录
+    tags:
+      - content-labeling                                # 无标识内容管理
+      - disclosure                                      # 日志留存
+
+  - clause: 第十条                                       # 条款定位
+    summary: 任何组织和个人不得恶意删除、篡改、伪造、隐匿标识，不得为他人实施上述行为提供工具或服务
+    obligation_type: prohibition                        # 禁止性要求
+    tags:
+      - content-labeling                                # 标识防篡改
+      - cybersecurity                                   # 安全防护
+
+  - clause: 第十二条                                     # 条款定位
+    summary: 在履行算法备案、安全评估等手续时，须按本办法提供生成合成内容标识相关材料，并加强标识信息共享
+    obligation_type: requires-reporting                 # 需提交材料
+    tags:
+      - algorithm-filing                                # 算法备案衔接
+      - supervision-and-reporting                       # 监管报送
+
+# ---- 其它 ----
+language: zh-CN                                        # 正文语言
+tags:                                                  # 自由标签
+  - 网信办                                             # 便于按机构检索
+  - 四部门联合发布                                       # 发文形式
+  - 强制性国家标准配套                                   # 有配套国标《网络安全技术 人工智能生成合成内容标识方法》
+notes: 本办法配套发布了强制性国家标准《网络安全技术 人工智能生成合成内容标识方法》，由市场监管总局、国家标准管理委员会批准发布。四部门为国家互联网信息办公室、工业和信息化部、公安部、国家广播电视总局。通知落款日期为 2025 年 3 月 7 日，公开报道日期为 2025 年 3 月 14 日，本记录 published_on 取后者（公开可查证的发布时点）。对金融机构的实际影响：面向客户展示的 AI 生成营销材料、投研报告、客服回复均需添加显式标识，且需在文件元数据中嵌入隐式标识。

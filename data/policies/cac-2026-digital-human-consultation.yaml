@@ -1,0 +1,118 @@
+# ============================================================
+# 政策记录：数字虚拟人信息服务管理办法（征求意见稿）
+# ------------------------------------------------------------
+# 【本记录演示本项目的差异化能力：政策演进链路追踪】
+#
+# 征求意见稿是「政策即将落地」的最早公开信号，对合规工作价值极高——
+# 金融机构可以据此提前调整产品设计，而不是等正式稿发布后被动整改。
+#
+# 但绝大多数政策知识库只收录已生效文件，因为它更"确定"。
+# 本项目的判断是：征求意见稿虽然状态不确定，但其**前瞻价值**恰恰在于
+# 不确定——等到确定时，整改窗口已经关闭。
+#
+# 本记录当前 status 为 consultation。待正式办法发布后，正确的维护动作是：
+#   1) 新建正式稿记录（如 cac-2026-digital-human-service）
+#   2) 在本记录中设置 superseded_by 指向正式稿
+#   3) 正式稿中在 supersedes 中反向声明本记录
+#   4) 本记录 status 改为 superseded
+# 校验器会强制检查双向指针一致性（见 store.validate_cross_references），
+# 因此这条演进链不会因为人工疏忽而断裂。
+# ============================================================
+
+# ---- 身份标识 ----
+id: cac-2026-digital-human-consultation          # 唯一标识（以 -consultation 后缀标明其征求意见稿属性）
+title: 数字虚拟人信息服务管理办法（征求意见稿）      # 官方全称，含「征求意见稿」字样，不作删改
+title_en: null                                   # 未查到官方英文版
+issuer: 国家互联网信息办公室                       # 发布机构
+issuer_code: cac                                 # 机构代码
+doc_number: null                                 # 征求意见稿无发文字号
+
+# ---- 法域 ----
+jurisdiction: CN                                 # 法域
+jurisdiction_detail: null                        # 国家层面
+
+# ---- 效力判断 ----
+instrument_type: 部门规范性文件                    # 层级：拟以暂行办法形式发布
+bindingness: consultation                        # 约束力：征求意见阶段，尚未生效，不产生任何义务
+ai_relevance: related                            # 相关度：数字虚拟人技术，金融场景部分相关
+                                                 # （虚拟主播、AI 演员、虚拟偶像为主，金融数字人客服部分交叉）
+domain:                                          # 所属领域
+  - 人工智能                                      # AI 领域
+  - 消费者权益                                    # 用户权益
+  - 金融                                         # 金融数字人客服相关
+topics:                                          # 主题标签
+  - content-labeling                             # 数字人标识（核心主题）
+  - personal-information                         # 真人驱动方权益保护
+  - consumer-protection                          # 用户知情权
+
+# ---- 时效性 ----
+status: consultation                              # 当前状态：征求意见中，尚未生效
+published_on: 2026-04-01                         # 公布日期：仅知 2026 年 4 月发布，此处填当月首日
+effective_from: null                             # 尚未生效，故留空（这符合 schema 规则：consultation 不应有生效日期）
+effective_until: null                            # 未设失效期限
+supersedes: []                                   # 不取代任何文件
+superseded_by: null                              # 【待正式稿发布后填写】应指向正式办法的 id
+amends: []                                       # 不修订任何文件
+amended_by: []                                   # 未被修订
+
+# ---- 版本链 ----
+versions:
+  - version: 1                                   # 首版（即征求意见稿本身）
+    published_on: 2026-04-01                     # 公布日期（月份精度）
+    effective_from: null                         # 征求意见稿不生效
+    effective_until: null                        # 无失效日期
+    status: consultation                         # 该版本状态：征求意见中
+    url: https://www.cac.gov.cn/                 # 网信办官网（详情页链接待补齐）
+    archived_url: null                           # 无需存档
+    content_hash: null                           # 未计算摘要
+    change_note: null                            # 首版
+
+# ---- 来源溯源 ----
+source:
+  url: https://www.cac.gov.cn/                   # 网信办官网（详情页链接待补）
+  site: cac.gov.cn                               # 来源站点
+  tier: primary                                  # 官方原始渠道
+  fetched_at: 2026-10-03T12:00:00+08:00          # 整理时间
+  http_status: null                              # 未执行抓取
+  content_hash: null                             # 未计算摘要
+  snapshot_path: null                            # 未保存快照
+
+# ---- 核验台账 ----
+last_verified: 2026-10-03                        # 最近核验日期
+verified_by: automated                           # 检索整理，尚未人工核对
+verified_note: 【需人工补充】公开报道仅有「2026 年 4 月发布征求意见稿」的月份级信息，未获得具体发布日与官方详情页 URL。published_on 按月份精度填当月首日。另需确认：截至 2026-10-03，该征求意见稿是否已转为正式办法发布——若已发布，应立即建立正式稿记录并补全本记录的 superseded_by 指针。
+
+# ---- 适用主体 ----
+applicable_to:                                   # 原文明确的适用主体
+  - 通过数字虚拟人向境内公众提供互联网信息服务的提供者     # 主要适用主体
+  - 数字虚拟人的真人驱动方                            # 权益保护对象
+
+# ---- 关键义务（征求意见稿内容，尚未生效，仅供前瞻参考） ----
+key_obligations:
+  - clause: 全程持续标识                            # 条款定位（征求意见稿具体条号待核验）
+    summary: 自数字虚拟人服务开始，数字虚拟人服务提供者、服务使用者及提供网络信息内容传播服务的服务提供者，应当在数字虚拟人展示区域全程持续显示含有「数字人」字样的显著提示标识
+    obligation_type: mandatory                     # 强制性要求（若正式稿保留此条）
+    tags:
+      - content-labeling                           # 数字人标识
+
+  - clause: 真人驱动方权益保护                       # 条款定位（待核验）
+    summary: 禁止侵害真人驱动数字虚拟人的真人驱动方个人信息、自主择业等合法权益
+    obligation_type: prohibition                   # 禁止性要求
+    tags:
+      - personal-information                       # 真人权益保护
+
+  - clause: 同意撤回后的注销义务                      # 条款定位（待核验）
+    summary: 在自然人撤回同意后应当注销数字虚拟人
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - personal-information                       # 同意撤回
+      - consumer-protection                        # 用户控制权
+
+# ---- 其它 ----
+language: zh-CN                                  # 正文语言
+tags:                                            # 自由标签
+  - 网信办                                       # 发文机关
+  - 征求意见稿                                    # 状态标注
+  - 前瞻性                                        # 价值定位
+  - 需补日期与链接                                 # 标记记录不完整
+notes: 【给使用者的三点提示】①本条记录的法律状态是「征求意见中」，**不产生任何合规义务**，不得作为合规依据引用；②其价值在于前瞻——金融机构若正在或计划部署虚拟数字人客服，应在正式办法发布前完成产品标识方案设计，避免正式稿发布后被动整改；③正式稿发布后请按本记录头部说明完成版本链路更新。对金融机构的具体相关性：虚拟数字人金融客服（如虚拟理财顾问、AI 大堂经理）是本办法的核心适用场景之一，「全程持续显示含有『数字人』字样的显著提示标识」这一要求若在正式稿中保留，将直接影响金融 App 的界面设计。

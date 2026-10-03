@@ -1,0 +1,70 @@
+{
+  "_fixture_note": "本文件是**合成数据**，不是真实的政府网站响应。它的字段名、嵌套结构与日期格式严格照搬 2026-10-03 对 nfra.gov.cn 接口 /cbircweb/DocInfo/SelectDocByItemIdAndChild 的实测结果，但所有标题与内容是自造的。这样做的原因：把真实的政府原文纳入仓库会引入第三方内容，与本项目「只溯源、不复制」的原则冲突；而字段结构属于接口契约，不受著作权保护。",
+  "rptCode": 200,
+  "msg": "成功",
+  "data": {
+    "total": 3,
+    "rows": [
+      {
+        "docId": 900001,
+        "docSubtitle": "某监管机构发布《关于银行业保险业人工智能安全开发应用的指导意见》",
+        "publishDate": "2026-06-18 10:30:00",
+        "docSummary": null,
+        "docFileUrl": "/chinese/OFFICE/DOC/900001.doc",
+        "generaltype": "0",
+        "pdfFileUrl": "/chinese/OFFICE/PDF/900001.pdf",
+        "itemName": null,
+        "solicitFlag": null,
+        "docTitle": "某监管机构发布《关于银行业保险业人工智能\n安全开发应用的指导意见》",
+        "datafrom": null,
+        "docUuid": null,
+        "builddate": null,
+        "isTitleLink": "0",
+        "titleLink": null,
+        "itemId": null,
+        "itemUuid": null,
+        "rulesIsVaild": null
+      },
+      {
+        "docId": 900002,
+        "docSubtitle": "某监管机构有关司局负责人就《银行业保险业人工智能安全开发应用的指导意见》答记者问",
+        "publishDate": "2026-06-18 15:00:00",
+        "docSummary": null,
+        "docFileUrl": "/chinese/OFFICE/DOC/900002.doc",
+        "generaltype": "0",
+        "pdfFileUrl": "/chinese/OFFICE/PDF/900002.pdf",
+        "itemName": null,
+        "solicitFlag": null,
+        "docTitle": "某监管机构有关司局负责人就《银行业保险业人工智能安全开发应用的指导意见》答记者问",
+        "datafrom": null,
+        "docUuid": null,
+        "builddate": null,
+        "isTitleLink": "0",
+        "titleLink": null,
+        "itemId": null,
+        "itemUuid": null,
+        "rulesIsVaild": null
+      },
+      {
+        "docId": 900003,
+        "docSubtitle": "关于某年度银行业保险业主要监管指标数据情况的通报",
+        "publishDate": "2026-08-14 09:00:00",
+        "docSummary": null,
+        "docFileUrl": "/chinese/OFFICE/DOC/900003.doc",
+        "generaltype": "0",
+        "pdfFileUrl": "/chinese/OFFICE/PDF/900003.pdf",
+        "itemName": null,
+        "solicitFlag": null,
+        "docTitle": "关于某年度银行业保险业主要监管指标数据情况的通报",
+        "datafrom": null,
+        "docUuid": null,
+        "builddate": null,
+        "isTitleLink": "0",
+        "titleLink": null,
+        "itemId": null,
+        "itemUuid": null,
+        "rulesIsVaild": null
+      }
+    ]
+  }
+}

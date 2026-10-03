@@ -1,0 +1,239 @@
+# ============================================================
+# 校验流程 —— 每次推送到主干、以及每个 PR 都会执行
+#
+# 为什么单独成一套，而不并进抓取流程
+# ----------------------------------
+# 抓取是「数据流入」，校验是「数据闸门」。
+# 前者每天定时跑一次就够，后者必须在**每一次改动**时立刻跑。
+# 若把两者写在一起，就会出现「改了代码，要等到明天早上才知道
+# 自己弄坏了数据校验」这种最糟糕的反馈延迟。
+#
+# 三个作业的分工
+# --------------
+#   quality —— 代码本身是否合格（风格 + 静态类型）
+#   tests   —— 行为是否正确（跨 Python 版本跑测试）
+#   data    —— 数据资产是否完整（这才是本项目真正的价值所在）
+# 三者互不依赖，任一失败都说明仓库处于不可发布状态。
+# ============================================================
+
+# 流程名，显示在 Actions 页面与 PR 检查列表里
+name: 校验
+
+# 触发条件
+on:
+  # 推送到主干分支
+  push:
+    branches: [main]
+  # 任何指向本仓库的拉取请求
+  pull_request:
+  # 允许手动触发，便于回查历史提交是否也能通过
+  workflow_dispatch:
+
+# 最小权限原则：本流程只读仓库内容，不需要写入任何东西
+permissions:
+  contents: read
+
+# 同一分支上连续推送时，取消尚未跑完的旧任务。
+# 旧结果已经被新提交取代，让它跑完只是浪费额度与等待时间。
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+
+jobs:
+  # ----------------------------------------------------------
+  # 作业一：代码质量
+  # ----------------------------------------------------------
+  quality:
+    # 显示名会出现在 PR 的检查清单里
+    name: 代码质量
+    runs-on: ubuntu-latest
+    # 本作业不含网络请求，给一个宽裕但有上限的时间
+    timeout-minutes: 15
+    steps:
+      # 拉取仓库代码
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      # 安装 Python 并开启依赖缓存
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          # 取中间版本：最旧的版本由 tests 作业负责验证兼容性，
+          # 这里只要一个「确定能跑」的版本用于静态检查即可
+          python-version: "3.12"
+          # 开启 pip 缓存，重复运行时省下依赖下载时间
+          cache: pip
+          # 缓存失效的判断依据：这两个文件内容变了说明依赖变了
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      # 安装依赖。
+      #
+      # 刻意**不用** `pip install -e ".[dev]"`：
+      # pyproject.toml 里的依赖声明是范围约束（>=），上游一发新版，
+      # CI 就可能因为与本项目无关的原因变红。
+      # requirements 系列文件里的版本是精确锁定的，用它才能得到可复现的环境。
+      # 最后单独装本包自身并加 --no-deps，避免它按范围重新解析一遍运行时依赖。
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+          python -m pip install -e . --no-deps
+
+      # 风格与常见错误检查。
+      # 用 github 输出格式，问题会以行内标注的形式直接出现在 PR 的 diff 上，
+      # 而不需要人去翻日志找是哪一行。
+      - name: ruff 静态检查
+        run: ruff check --output-format=github .
+
+      # 类型检查。
+      # 范围只含 src（不含 tests），原因见 pyproject.toml 中 [tool.mypy] 下方的说明——
+      # 简单说：src 布局加无 __init__.py 的 tests 目录会让 mypy 无法同时
+      # 满足两种模块命名假设，硬要检查会得到一条与代码质量无关的永久报错。
+      # 「一个永远红的检查比没有检查更糟」，所以范围划清楚并按此执行。
+      - name: mypy 类型检查
+        run: mypy src
+
+
+  # ----------------------------------------------------------
+  # 作业二：单元测试（跨 Python 版本）
+  # ----------------------------------------------------------
+  tests:
+    # 矩阵变量会代入到显示名里，一眼能看出是哪个版本挂了
+    name: 测试（Python ${{ matrix.python-version }}）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # 【关键】某个版本失败时不要取消其余版本。
+      # 我们恰恰需要知道「是全部版本都坏了」还是「只有 3.10 坏了」——
+      # 前者说明逻辑写错，后者说明用了新语法，两者的修法完全不同。
+      fail-fast: false
+      matrix:
+        # 覆盖 pyproject.toml 里 classifiers 声明的全部版本。
+        # 本项目在运行期使用了 X | Y 联合类型（如 isinstance(x, int | float)），
+        # 这是 3.10 才有的语法，因此最低版本必须实测，不能只写在配置里。
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      # 拉取仓库代码
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      # 安装矩阵指定的 Python 版本
+      - name: 安装 Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      # 依赖安装方式与上一致，保证与代码质量作业完全同构
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+          python -m pip install -e . --no-deps
+
+      # 运行测试。
+      # -m "not network"：跳过标记为需要真实外网访问的测试。
+      #   政府网站的境外可达性不稳定，拿它当构建门禁会让 CI 随机变红，
+      #   而随机的红色最终会训练所有人忽略红色。
+      #   网络可达性另有专门的排查方式（见抓取流程），不该由单元测试承担。
+      # --cov：统计覆盖率，term-missing 会直接列出未被覆盖的行号，
+      #   让「哪条解析分支还没测」一眼可见，而不必去生成 HTML 报告。
+      - name: 运行测试
+        run: pytest -m "not network" --cov=finreg_ai --cov-report=term-missing
+
+
+  # ----------------------------------------------------------
+  # 作业三：数据完整性（本项目的核心资产）
+  # ----------------------------------------------------------
+  # 说明：代码坏了可以修，数据坏了会一路传播出去——
+  # 一条 status 写成 effective 但实际已废止的记录，可能直接被下游
+  # 当作合规依据使用。因此数据校验必须是一道独立的、明确的闸门。
+  data:
+    name: 数据完整性
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # 拉取仓库代码
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      # 安装 Python
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      # 数据校验只需要运行时依赖，不需要开发依赖
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e . --no-deps
+
+      # 第一道：数据源登记表本身是否自洽
+      # （抓取器名是否已注册、URL 是否规范、备注是否写成单行等）
+      - name: 校验数据源登记表
+        run: finreg validate-sources
+
+      # 第二道：全部政策记录的三层校验
+      #   结构层 —— JSON Schema（字段类型、枚举取值、必填项）
+      #   语义层 —— 数据类自身的规则（如 supersedes 指向的 id 不能是自己）
+      #   引用层 —— 跨记录一致性（如版本链两端必须互相指向）
+      # 发现错误时退出码为 1，会直接让本作业失败，进而阻断合并。
+      - name: 校验全部政策记录
+        run: finreg validate
+
+      # 第三道：变更流文件必须能被解析。
+      # 变更流是抓取流程自动提交进来的机器产物，属于「不是人写的」那部分数据，
+      # 恰恰因此更需要校验——一旦写入半截或被截断，它不会被 code review 发现。
+      - name: 校验变更流文件可解析
+        run: |
+          python - <<'PY'
+          import json
+          import pathlib
+
+          # 逐个解析 data/changes 下的 JSON 文件
+          bad = []
+          files = sorted(pathlib.Path("data/changes").glob("*.json"))
+          for path in files:
+              try:
+                  json.loads(path.read_text(encoding="utf-8"))
+              except Exception as exc:  # noqa: BLE001  这里就是要抓住任何解析失败
+                  bad.append(f"{path}: {type(exc).__name__}: {exc}")
+
+          # 有坏文件时打印并让本步骤失败
+          if bad:
+              print("以下变更流文件无法解析：")
+              for item in bad:
+                  print(f"  - {item}")
+              raise SystemExit(1)
+
+          print(f"变更流文件全部可解析（共 {len(files)} 个）")
+          PY
+
+      # 第四道：陈旧记录提醒。
+      # 只提示不阻断——记录陈旧是「需要安排核验」的待办，不是错误。
+      # 若哪天希望让它成为硬门禁，把这一步换成 finreg validate --strict-stale 即可，
+      # 但那意味着一条 180 天没核验的记录会拦住所有合并，需要先想清楚是否值得。
+      - name: 列出超期未核验的记录（仅提示）
+        run: finreg stale --days 180
+
+      # 把记录规模写进任务摘要，让「数据是不是在变多」这件事
+      # 在 Actions 页面上直接可见，不必点进日志
+      - name: 输出数据概览
+        run: |
+          count=$(finreg list --json 2>/dev/null | python -c "import json,sys; print(len(json.load(sys.stdin)))")
+          {
+            echo "## 数据概览"
+            echo ""
+            echo "- 政策记录总数：${count}"
+            echo "- 校验结论：数据源登记表与全部政策记录均通过"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,467 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/finreg-ai-cn/schema/policy.schema.json",
+  "title": "金融 AI 合规政策记录",
+  "description": "单条政策的完整记录结构。本 schema 是项目的核心契约：所有数据文件必须通过校验才能进入仓库。设计上把「时效性」作为第一公民——status / effective_from / effective_until / supersedes / superseded_by / last_verified 六件套共同回答一个合规场景唯一重要的问题：「这条政策现在还有效吗，依据是什么」。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "issuer",
+    "jurisdiction",
+    "instrument_type",
+    "bindingness",
+    "ai_relevance",
+    "domain",
+    "status",
+    "published_on",
+    "source",
+    "last_verified",
+    "verified_by"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "全局唯一稳定标识符，格式为 <issuer_code>-<年份>-<语义化短名>，例如 nfra-2026-ai-guidance。一旦发布永不变更，因为下游会用它做外键引用（supersedes / superseded_by / key_obligations 的父引用）。禁止使用中文、空格或下划线。",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)+$",
+      "minLength": 6,
+      "maxLength": 80,
+      "examples": ["nfra-2026-ai-guidance", "cac-2023-genai-interim-measures"]
+    },
+    "title": {
+      "type": "string",
+      "description": "政策的中文官方全称，必须与官方发布页标题完全一致（含书名号），不得改写、简化或润色。这是可核验性的基础。",
+      "minLength": 4,
+      "maxLength": 300,
+      "examples": ["关于银行业保险业人工智能安全开发应用的指导意见"]
+    },
+    "title_en": {
+      "type": ["string", "null"],
+      "description": "英文标题，仅在中国官方发布英文版时填写官方译名。若为自行翻译，必须留空并把译法写入 notes，避免自创译名被误当作官方表述引用。",
+      "default": null
+    },
+    "issuer": {
+      "type": "string",
+      "description": "发布机构的官方全称。多部门联合发布时用中文顿号「、」分隔，顺序按官方文件署名顺序排列。",
+      "minLength": 2,
+      "examples": ["国家金融监督管理总局", "中国人民银行、中央网信办、工业和信息化部"]
+    },
+    "issuer_code": {
+      "type": "string",
+      "description": "发布机构的短代码，用于生成 id 前缀与分类聚类。取值必须在 data/sources.yaml 的 issuers 列表中登记，保证机构名称不会出现多种写法。",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "examples": ["nfra", "pbc", "cac", "csrc"]
+    },
+    "doc_number": {
+      "type": ["string", "null"],
+      "description": "官方发文字号，例如「银发〔2023〕89号」。无发文字号的文件（如公告、征求意见稿）填 null。注意此处使用中文全角方括号〔〕而非【】或[]。",
+      "default": null
+    },
+    "jurisdiction": {
+      "type": "string",
+      "description": "法域。MVP 阶段固定为 CN（中国大陆）。保留该字段是为了未来扩展多法域时不破坏数据结构——虽然当前只有单一取值，也绝不可省略。",
+      "enum": ["CN"]
+    },
+    "jurisdiction_detail": {
+      "type": ["string", "null"],
+      "description": "法域细分层级。用于地方性文件，填写省级行政区官方简称（如「上海市」「深圳市」）。国家层面文件填 null。",
+      "default": null,
+      "examples": ["上海市", "北京市", "深圳市"]
+    },
+    "instrument_type": {
+      "type": "string",
+      "description": "文件效力层级。这是判断约束力的第一依据，且决定了它能否作为合规主张的法律基础。层级由高到低：法律 > 行政法规 > 部门规章 > 部门规范性文件 > 行业自律规则 > 国家标准 > 地方性文件。",
+      "enum": [
+        "法律",
+        "行政法规",
+        "部门规章",
+        "部门规范性文件",
+        "行业自律规则",
+        "国家标准",
+        "地方性文件",
+        "其他"
+      ]
+    },
+    "bindingness": {
+      "type": "string",
+      "description": "约束力性质，与 instrument_type 正交。instrument_type 回答「这是什么级别的文件」，bindingness 回答「它是否产生强制义务」。合规判断必须看这一项：指导意见虽属部门规范性文件，但其中「须」「不得」「严禁」等表述对应实质义务。",
+      "enum": [
+        "binding",
+        "soft-law",
+        "guidance",
+        "consultation"
+      ],
+      "enumDescriptions": [
+        "binding：产生强制法律义务，违反面临行政处罚或监管措施",
+        "soft-law：不直接设定义务，但构成监管预期，实践中具有事实约束力",
+        "guidance：鼓励性与倡导性表述，无强制力",
+        "consultation：征求意见阶段，尚未生效，不产生任何义务"
+      ]
+    },
+    "ai_relevance": {
+      "type": "string",
+      "description": "与 AI 合规主题的相关度，用于筛选。core 表示主体内容直接规范 AI 的开发或应用；related 表示部分条款涉及 AI；background 表示仅提供上位法背景（如网络安全法之于 AI 合规）。",
+      "enum": ["core", "related", "background"]
+    },
+    "domain": {
+      "type": "array",
+      "description": "所属领域，至少一项。金融 + 人工智能的组合是本项目的核心关注点，但保留单一领域取值以容纳上位法。",
+      "items": {
+        "type": "string",
+        "enum": [
+          "金融",
+          "银行",
+          "保险",
+          "证券",
+          "基金",
+          "支付清算",
+          "金融科技",
+          "人工智能",
+          "数据",
+          "网络安全",
+          "科技伦理",
+          "消费者权益"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "topics": {
+      "type": "array",
+      "description": "主题标签，用于跨机构聚类检索。取值来自受控词表，禁止自由发挥——自由标签在半年后必然退化为无法检索的垃圾。",
+      "items": {
+        "type": "string",
+        "enum": [
+          "ai-governance",
+          "model-risk",
+          "algorithm-filing",
+          "content-labeling",
+          "deep-synthesis",
+          "high-risk-ai",
+          "human-oversight",
+          "explainability",
+          "bias-and-fairness",
+          "data-security",
+          "personal-information",
+          "data-quality",
+          "outsourcing",
+          "open-source-management",
+          "supply-chain",
+          "cybersecurity",
+          "prompt-injection",
+          "business-continuity",
+          "ethics-review",
+          "consumer-protection",
+          "disclosure",
+          "computing-power",
+          "talent-and-culture",
+          "supervision-and-reporting"
+        ]
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "status": {
+      "type": "string",
+      "description": "【时效性核心字段一】政策的当前法律状态。这是整个 schema 中最重要的字段——用户来查知识库，第一个要问的就是「这条现在还有效吗」。取值必须由核验得出，严禁推测。",
+      "enum": [
+        "draft",
+        "consultation",
+        "published",
+        "effective",
+        "partially_effective",
+        "amended",
+        "repealed",
+        "superseded",
+        "expired",
+        "unknown"
+      ],
+      "enumDescriptions": [
+        "draft：起草阶段，未公开征求意见",
+        "consultation：已发布征求意见稿，尚未定稿生效",
+        "published：已正式公布，但生效日期尚未到达",
+        "effective：现行有效，处于生效期内",
+        "partially_effective：部分条款生效或已部分失效",
+        "amended：已被修订，修订后的版本现行有效（须通过 amended_by 指向新版本）",
+        "repealed：已被明文废止",
+        "superseded：已被新文件取代但未明文废止（新文件通过 supersedes 反向指向本条）",
+        "expired：有效期届满自动失效",
+        "unknown：无法确认，须在 notes 中说明核验过程与障碍"
+      ]
+    },
+    "published_on": {
+      "type": "string",
+      "description": "官方公布日期，格式 YYYY-MM-DD。必须取自官方发布页，不得使用新闻转载日期。",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "effective_from": {
+      "type": ["string", "null"],
+      "description": "【时效性核心字段二】生效起始日期，格式 YYYY-MM-DD。尚未定稿的文件（draft / consultation）填 null。注意：公布日与生效日常常不同（如发布时规定「自 2023 年 8 月 15 日起施行」），必须分别记录。",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "default": null
+    },
+    "effective_until": {
+      "type": ["string", "null"],
+      "description": "【时效性核心字段三】失效日期。仅在文件自身规定了有效期（如「试行两年」）或已被明文废止并载明废止日期时填写。多数文件为 null，表示无固定失效期限，需靠主动核验确认状态。",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "default": null
+    },
+    "supersedes": {
+      "type": "array",
+      "description": "【时效性核心字段四】本条取代了哪些先前文件。填入被取代文件的 id。这是版本链的「向后指针」，与 superseded_by 构成双向引用，两者必须互相一致（校验器会强制检查）。",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(-[a-z0-9]+)+$"
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "superseded_by": {
+      "type": ["string", "null"],
+      "description": "【时效性核心字段五】本条被哪个文件取代。填入取代者的 id。指向不存在的 id 会导致校验失败——这是防止版本链断裂的关键约束。",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)+$",
+      "default": null
+    },
+    "amends": {
+      "type": "array",
+      "description": "本条修订了哪些文件的全部或部分条款。填入被修订文件的 id。",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(-[a-z0-9]+)+$"
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "amended_by": {
+      "type": "array",
+      "description": "本条被哪些文件修订过。填入修订者 id 列表。与 amends 构成双向引用。",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(-[a-z0-9]+)+$"
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "versions": {
+      "type": "array",
+      "description": "版本历史。每次官方修订都追加一条，构成完整的版本链。首版也必须有且仅有一条。这样设计是因为「政策被修订」在合规场景中是高频事件，但绝大多数知识库只保留最新版，导致无法追溯历史义务——而合规审查恰恰经常需要判断「当时适用的是哪一版」。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "published_on", "status", "url"],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "description": "版本序号，从 1 开始递增，不可跳号",
+            "minimum": 1
+          },
+          "published_on": {
+            "type": "string",
+            "description": "该版本公布日期",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "effective_from": {
+            "type": ["string", "null"],
+            "description": "该版本生效起始日期。征求意见稿版本填 null。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "default": null
+          },
+          "effective_until": {
+            "type": ["string", "null"],
+            "description": "该版本失效日期。下一版本生效之日或废止之日，未失效则 null。",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "default": null
+          },
+          "status": {
+            "type": "string",
+            "description": "该版本自身在其存续期内的状态。历史版本通常为 superseded。",
+            "enum": [
+              "draft",
+              "consultation",
+              "published",
+              "effective",
+              "partially_effective",
+              "amended",
+              "repealed",
+              "superseded",
+              "expired",
+              "unknown"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "description": "该版本官方原文链接。必须指向官方站点，禁止指向第三方转载。若官方已下架旧版本页面，填 archived_url 并保留此处原值以留痕。",
+            "format": "uri",
+            "pattern": "^https?://"
+          },
+          "archived_url": {
+            "type": ["string", "null"],
+            "description": "该版本官方页面已不可访问时的存档链接（如 Web Archive）。仅在官方页面确实下架时填写。",
+            "format": "uri",
+            "default": null
+          },
+          "content_hash": {
+            "type": ["string", "null"],
+            "description": "该版本正文的 SHA-256 摘要，格式 sha256:<64位十六进制>。用于检测官方页面在未发布修订通知的情况下被静默修改——这种情况在监管网站上确有发生，是变更检测的最后一道防线。",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "default": null
+          },
+          "change_note": {
+            "type": ["string", "null"],
+            "description": "该版本相对上一版本的主要变化，一句话概括。首版填 null。这是人工提炼字段，禁止使用 LLM 生成后不经人工复核直接写入。",
+            "default": null
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "source": {
+      "type": "object",
+      "description": "来源溯源信息。这是本项目的信任基础——每条记录都必须能追溯到官方页面，且带有可复核的时间戳与内容指纹。",
+      "additionalProperties": false,
+      "required": ["url", "site", "tier", "fetched_at"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "官方原文链接（最新版本的页面地址）",
+          "format": "uri",
+          "pattern": "^https?://"
+        },
+        "site": {
+          "type": "string",
+          "description": "来源站点域名，用于按源统计与失效排查",
+          "examples": ["nfra.gov.cn", "pbc.gov.cn", "cac.gov.cn"]
+        },
+        "tier": {
+          "type": "string",
+          "description": "来源权威等级。primary 表示官方原始发布渠道，是本项目唯一可作为记录来源的等级。secondary 仅可用于发现线索，其内容不得进入记录字段。unverified 表示来源不明，一律不采用。",
+          "enum": ["primary", "secondary", "unverified"],
+          "default": "primary"
+        },
+        "fetched_at": {
+          "type": "string",
+          "description": "抓取时间，ISO 8601 带时区偏移。必须记录时区，因为跨时区协作时无时区的时间戳无法比较。",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\+\\d{2}:\\d{2}|Z)$"
+        },
+        "http_status": {
+          "type": ["integer", "null"],
+          "description": "抓取时的 HTTP 状态码。非 200 说明官方页面可能异常，需人工确认。",
+          "default": null
+        },
+        "content_hash": {
+          "type": ["string", "null"],
+          "description": "抓取到的正文 SHA-256 摘要，格式 sha256:<64位十六进制>。与 versions[].content_hash 配合，可判断官方是否在无通知的情况下修改了已生效文件。",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "default": null
+        },
+        "snapshot_path": {
+          "type": ["string", "null"],
+          "description": "仓库内原始快照的相对路径，例如 data/snapshots/nfra/2026-10-03/nfra-2026-ai-guidance.html。保留快照是为了在解析逻辑出错时能离线重建，也便于审计。",
+          "default": null
+        }
+      }
+    },
+    "last_verified": {
+      "type": "string",
+      "description": "【时效性核心字段六】最近一次人工或自动核验该记录状态的日期，格式 YYYY-MM-DD。这个字段让「陈旧」变成可见的——超过 90 天未核验的记录会在 CI 中告警。竞品 ai-law-tracker.com 与已停更的 delschlangen/ai-legislation-tracker 都保留了同类字段，是本领域公认的必要设计。",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "verified_by": {
+      "type": "string",
+      "description": "最近一次核验的执行方式。这个字段的存在是为了让使用者能判断记录可信度：automated 表示仅由爬虫确认页面可访问且内容哈希未变，human 表示已由人工打开官方页面逐项核对状态字段。",
+      "enum": ["human", "automated"]
+    },
+    "verified_note": {
+      "type": ["string", "null"],
+      "description": "核验过程说明。当 status 为 unknown，或核验遇到障碍（如官网改版、页面下架、无法判断是否已被取代）时，必须在此说明具体情况，便于后续接手人继续核查。",
+      "default": null
+    },
+    "applicable_to": {
+      "type": "array",
+      "description": "适用主体清单，抄录文件明确列举的适用机构类型。这个字段直接决定使用者是否需要关心这条政策，是实用性最强的筛选维度之一。",
+      "items": {
+        "type": "string"
+      },
+      "examples": [
+        ["银行业金融机构", "保险业金融机构"],
+        ["生成式人工智能服务提供者"]
+      ],
+      "default": []
+    },
+    "key_obligations": {
+      "type": "array",
+      "description": "关键义务条目。这是人工提炼的增值内容，也是与纯爬虫项目的核心区别——爬虫只能给你原文，提炼才能给你可执行的义务清单。注意每条义务都必须能对应到原文的具体条款，禁止无出处概括。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["clause", "summary"],
+        "properties": {
+          "clause": {
+            "type": "string",
+            "description": "原文条款定位，如「十六」「第 16 条」「（十六）」。必须与原文标号一致，便于使用者回源核对。",
+            "minLength": 1
+          },
+          "summary": {
+            "type": "string",
+            "description": "义务内容概括，一句话说清「谁必须做什么」。这是人工撰写字段，不是 AI 摘要——AI 生成的摘要必须标注来源且不得写入此字段。",
+            "minLength": 4
+          },
+          "obligation_type": {
+            "type": ["string", "null"],
+            "description": "义务类型，用于聚合统计。为空表示尚未归类。",
+            "enum": [
+              "prohibition",
+              "mandatory",
+              "requires-approval",
+              "requires-reporting",
+              "requires-recordkeeping",
+              "requires-assessment",
+              "encouraged",
+              null
+            ],
+            "default": null
+          },
+          "tags": {
+            "type": "array",
+            "description": "该义务涉及的主题标签，取值同顶层的 topics 受控词表",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true,
+            "default": []
+          }
+        }
+      },
+      "default": []
+    },
+    "language": {
+      "type": "string",
+      "description": "正文语言，BCP 47 标签。MVP 阶段固定 zh-CN。",
+      "enum": ["zh-CN"],
+      "default": "zh-CN"
+    },
+    "tags": {
+      "type": "array",
+      "description": "自由标签，用于项目内自定义分类。与受控词表 topics 分开管理——自由标签允许试错，稳定后应提升为 topics 词表项。",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "补充说明。用于记录无法结构化表达的重要信息：联合发布的部门分工、与其他文件的实质关联、核验过程中发现的疑问、自译英文标题的说明等。",
+      "default": null
+    }
+  }
+}

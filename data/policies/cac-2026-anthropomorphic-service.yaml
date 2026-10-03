@@ -1,0 +1,114 @@
+# ============================================================
+# 政策记录：人工智能拟人化互动服务管理暂行办法
+# ------------------------------------------------------------
+# 对金融机构的直接相关性：本办法明确排除了「一般性的智能客服、
+# 知识问答、工作助手类服务」，因此绝大多数金融客服 AI 不适用。
+# 但智能投顾若采用陪伴式、情感化的交互设计，则可能落入适用范围。
+#
+# 这条记录展示了 topics 与 ai_relevance 字段的价值：
+# 用户可以用 `finreg list --ai-relevance related --topic consumer-protection`
+# 快速筛出「与金融客服相关但不适用本办法」的政策，避免误判合规义务。
+# ============================================================
+
+# ---- 身份标识 ----
+id: cac-2026-anthropomorphic-service             # 唯一标识
+title: 人工智能拟人化互动服务管理暂行办法           # 官方全称
+title_en: null                                   # 未查到官方英文版
+issuer: 国家互联网信息办公室                       # 发布机构（暂行办法，主体为网信办）
+issuer_code: cac                                 # 机构代码
+doc_number: null                                 # 公开页面未标注发文字号
+
+# ---- 法域 ----
+jurisdiction: CN                                 # 法域
+jurisdiction_detail: null                        # 国家层面
+
+# ---- 效力判断 ----
+instrument_type: 部门规范性文件                    # 层级：暂行办法
+bindingness: binding                             # 约束力：设定安全评估报告提交义务与多项禁止性要求
+ai_relevance: related                            # 相关度：主体为拟人化情感互动服务，
+                                                 # 与金融客服 AI 部分交叉（明确的排除条款使其相关度降为 related）
+domain:                                          # 所属领域
+  - 人工智能                                      # AI 领域
+  - 消费者权益                                    # 用户保护
+  - 金融                                         # 金融场景部分相关（智能投顾）
+topics:                                          # 主题标签
+  - consumer-protection                          # 用户保护（核心主题）
+  - supervision-and-reporting                     # 安全评估报告
+  - content-labeling                             # 与 AI 互动的提示标识
+  - disclosure                                   # 服务目标约束
+
+# ---- 时效性 ----
+status: effective                                # 当前状态：现行有效
+published_on: 2026-07-01                         # 公布日期：仅精确到月份，此处填当月首日
+effective_from: null                             # 【刻意留空】仅知 2026 年 7 月施行，未确认具体日期
+effective_until: null                            # 无固定失效期限
+supersedes: []                                   # 未取代先前文件
+superseded_by: null                              # 未被取代
+amends: []                                       # 未修订任何文件
+amended_by: []                                           # 未被修订
+
+# ---- 版本链 ----
+versions:
+  - version: 1                                   # 首版
+    published_on: 2026-07-01                     # 公布日期（月份精度，填当月首日）
+    effective_from: null                         # 施行日期待核验
+    effective_until: null                        # 尚未失效
+    status: effective                            # 现行有效
+    url: https://www.cac.gov.cn/                 # 网信办官网（详情页链接待补齐）
+    archived_url: null                           # 无需存档
+    content_hash: null                           # 未计算摘要
+    change_note: null                            # 首版
+
+# ---- 来源溯源 ----
+source:
+  url: https://www.cac.gov.cn/                   # 网信办官网（详情页链接待补）
+  site: cac.gov.cn                               # 来源站点
+  tier: primary                                  # 官方原始渠道
+  fetched_at: 2026-10-03T12:00:00+08:00          # 整理时间
+  http_status: null                              # 未执行抓取
+  content_hash: null                             # 未计算摘要
+  snapshot_path: null                            # 未保存快照
+
+# ---- 核验台账 ----
+last_verified: 2026-10-03                        # 最近核验日期
+verified_by: automated                           # 检索整理，尚未人工核对
+verified_note: 【需人工补充】公开报道仅有「2026 年 7 月施行」的月份级信息，未获得具体施行日期与官方详情页 URL。published_on 与版本 published_on 均按月份精度填写当月首日（2026-07-01），此值不代表真实公布日期，人工核验时应予替换。effective_from 留空以避免制造虚假精度。
+
+# ---- 适用主体 ----
+applicable_to:                                   # 原文明确的适用主体
+  - 利用人工智能技术向境内公众提供模拟自然人人格特征、思维模式和沟通风格的持续性情感互动服务的服务提供者  # 主要适用主体
+
+# ---- 关键义务 ----
+key_obligations:
+  - clause: 安全评估报告提交义务                     # 条款定位（具体条号待核验）
+    summary: 出现以下情形须进行安全评估并向所在地省级网信部门提交安全评估报告：①上线拟人化互动服务或增设相关功能；②使用新技术新应用导致服务重大变化；③注册用户 100 万以上或月活跃用户 10 万以上；④存在可能影响国家安全、公共利益等安全风险
+    obligation_type: requires-reporting            # 需提交报告
+    tags:
+      - supervision-and-reporting                  # 安全评估报告
+
+  - clause: 服务目标禁止                         # 条款定位（具体条号待核验）
+    summary: 不得将替代社会交往、控制用户心理、诱导沉迷依赖等作为服务目标，并应采取有效措施提示用户正在与人工智能而非自然人互动
+    obligation_type: prohibition                   # 禁止性要求
+    tags:
+      - disclosure                                 # 交互对象提示
+      - consumer-protection                        # 用户保护
+
+  - clause: 年龄核验义务                         # 条款定位（具体条号待核验）
+    summary: 应当在注册或功能激活环节嵌入年龄核验机制，绝对禁止向未成年人提供虚拟亲密关系服务
+    obligation_type: prohibition                   # 禁止性要求
+    tags:
+      - consumer-protection                        # 未成年人保护
+
+  - clause: 极端情绪干预义务                       # 条款定位（具体条号待核验）
+    summary: 发现用户出现极端情绪的，应及时生成情绪安抚和鼓励寻求帮助等内容；发现用户面临或已遭受重大财产损失、明确表示实施自残自杀等极端情境的，应采取援助等必要措施干预并及时联络其监护人或紧急联系人
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - consumer-protection                        # 危机干预（含财产损失情形）
+
+# ---- 其它 ----
+language: zh-CN                                  # 正文语言
+tags:                                            # 自由标签
+  - 网信办                                       # 发文机关
+  - 需补日期与链接                                 # 标记记录不完整
+  - 适用性存疑                                     # 标注需判断是否适用于自身业务
+notes: 【适用性判断对本条记录最为关键】本办法明确将「一般性的智能客服、知识问答、工作助手类服务」排除在适用范围之外，理由是这些服务不涉及持续性情感互动。因此：①绝大多数金融机构的标准智能客服不适用本办法；②但若金融机构的投顾助手采用拟人化人设、持续陪伴式交互设计（如「AI 理财伙伴」「AI 投资教练」），则可能被认定落入适用范围；③办法中的「注册用户 100 万以上或月活跃用户 10 万以上」触发安全评估，对大型金融机构的 App 用户规模而言门槛较低，一旦适用即需履行报告义务；④极端情绪干预条款特别提到「面临或已遭受重大财产损失」的情形，与金融业务场景直接相关。建议金融机构在评估时重点关注自家 AI 助手的产品定位表述，而非仅看技术实现。

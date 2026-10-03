@@ -1,0 +1,27 @@
+{
+  "_fixture_note": "本文件是**合成数据**，不是真实的政府网站响应。字段名与结构照搬 2026-10-03 对 csrc.gov.cn 接口 /searchList/{channelId} 的实测结果：标题在 title、链接在 url、日期在 publishedTime（13 位 epoch 毫秒）。刻意同时保留 publishedTimeStr 字段，用于测试「配置指向错误的日期字段时会被质量自检拦下」这一场景。",
+  "rptCode": 200,
+  "data": {
+    "total": 3,
+    "results": [
+      {
+        "title": "【第152号令】《证券基金经营机构信息技术管理办法》",
+        "url": "/csrc/c101953/c1019531/c1019532/content.shtml",
+        "publishedTime": 1786847417000,
+        "publishedTimeStr": "2026-09-11 18:10:17"
+      },
+      {
+        "title": "【第235号令】《期货公司监督管理办法》",
+        "url": "/csrc/c101953/c1019531/c1019533/content.shtml",
+        "publishedTime": 1786847417000,
+        "publishedTimeStr": "2026-09-11 18:10:17"
+      },
+      {
+        "title": "《证券期货业网络安全管理办法》",
+        "url": "/csrc/c101953/c1019531/c1019534/content.shtml",
+        "publishedTime": 1786847417000,
+        "publishedTimeStr": "2026-09-11 18:10:17"
+      }
+    ]
+  }
+}

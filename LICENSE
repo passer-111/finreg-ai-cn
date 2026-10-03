@@ -1,0 +1,35 @@
+MIT License
+
+Copyright (c) 2026 finreg-ai-cn contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+注（非许可证正文，仅为便于中文读者理解）：
+
+本许可证适用于本仓库中的**源代码**（`src/`、`tests/` 目录下的 .py 文件，
+以及 `schema/` 下的 JSON Schema 文件）。
+
+本仓库的**数据内容**（`data/` 目录下的 YAML 记录）适用另一份许可证，
+详见 DATA_LICENSE.md。
+
+本项目所整理的政策文件本身属于《中华人民共和国著作权法》第五条规定
+的不适用著作权法的官方文件，其权利状态与上述两份许可证无关。
+详见 DATA_LICENSE.md 中的说明。

@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/finreg-ai-cn/schema/source.schema.json",
+  "title": "数据源登记表",
+  "description": "定义 data/sources.yaml 的结构。本项目把「数据源」当作一等公民单独建模，而不是把 URL 硬编码在各个抓取器里。这样做的原因是：政府网站会改版、会下架、会合并，数据源本身的状态需要被独立管理和审计。当某个源失效时，我们只需要改这一个文件，不必改代码，也不必发版。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "issuers", "sources"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "description": "登记表的结构版本号。当本文件的结构发生不兼容变更时递增，抓取器会据此判断如何解析。",
+      "minimum": 1
+    },
+    "issuers": {
+      "type": "array",
+      "description": "发布机构字典。所有政策记录的 issuer_code 必须在此登记，以此消除同一机构的多种写法（如「国家金融监督管理总局」与「金融监管总局」）。",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "name", "domain", "homepage", "authority_level"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "机构短代码，用作政策 id 前缀，必须与 policy.schema.json 的 issuer_code 规则一致",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "name": {
+            "type": "string",
+            "description": "机构官方全称，写入政策记录的 issuer 字段时须使用此值",
+            "minLength": 2
+          },
+          "abbr": {
+            "type": ["string", "null"],
+            "description": "常用简称，仅用于显示与检索，不得写入政策记录",
+            "default": null
+          },
+          "domain": {
+            "type": "string",
+            "description": "机构官方网站域名，用于校验政策记录的 source.site 字段",
+            "pattern": "^[a-z0-9.-]+\\.[a-z]{2,}$"
+          },
+          "homepage": {
+            "type": "string",
+            "description": "机构官网首页地址",
+            "format": "uri",
+            "pattern": "^https?://"
+          },
+          "authority_level": {
+            "type": "string",
+            "description": "机构在监管体系中的层级，决定其发布文件的效力上限。用于校验 instrument_type 是否合理。",
+            "enum": [
+              "national-law",
+              "state-council",
+              "ministry",
+              "central-regulator",
+              "exchange",
+              "industry-association",
+              "standards-body",
+              "local-government"
+            ]
+          },
+          "notes": {
+            "type": ["string", "null"],
+            "description": "机构备注，例如改名历史、合并情况、网站改版记录",
+            "default": null
+          }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "description": "数据源列表。每个数据源对应一个可抓取的官方列表页或栏目。一个机构可以有多个数据源（如「规章」「公告」「征求意见」分属不同栏目）。",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "issuer_code", "name", "tier", "enabled", "fetcher"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "数据源唯一标识，用于变更流与日志中定位问题源",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)+$"
+          },
+          "issuer_code": {
+            "type": "string",
+            "description": "所属机构代码，必须存在于本文件的 issuers 列表中",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "name": {
+            "type": "string",
+            "description": "数据源的中文名称，说明这是哪个栏目",
+            "minLength": 2
+          },
+          "tier": {
+            "type": "string",
+            "description": "来源权威等级。本项目只允许 primary 源的数据写入政策记录。secondary 源可用于发现线索但不能作为记录来源。",
+            "enum": ["primary", "secondary"]
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "是否启用。源失效或正在改版时置为 false，流水线会跳过并记录，而不是反复失败。"
+          },
+          "fetcher": {
+            "type": "string",
+            "description": "使用的抓取器类型。json_search_list 是配置驱动的通用 JSON 接口抓取器，覆盖中国政府 CMS 的 /searchList 接口族（首选，因为多数监管网站列表页为 JS 渲染）。html_list 是配置驱动的通用 HTML 列表抓取器，用于仍采用服务端渲染的站点。其余为特定站点专用抓取器。",
+            "enum": ["json_search_list", "html_list", "nfra", "pbc", "cac", "csrc", "manual"]
+          },
+          "list_url": {
+            "type": ["string", "null"],
+            "description": "列表页地址。manual 类型的源可为空（表示需要人工录入，不做自动抓取）。",
+            "default": null
+          },
+          "schedule": {
+            "type": "string",
+            "description": "建议抓取频率，供流水线调度参考。cron 表达式，默认每日一次。政府网站更新不频繁，无需高频抓取，避免给对方服务器造成压力。",
+            "default": "0 6 * * *"
+          },
+          "min_interval_seconds": {
+            "type": "number",
+            "description": "同一源内请求之间的最小间隔秒数。这是对监管机构服务器的基本礼貌，也是对自身被封禁的防护。",
+            "minimum": 0,
+            "default": 3
+          },
+          "pagination": {
+            "type": ["object", "null"],
+            "description": "分页配置。若列表页需要翻页才能看到全部条目，在此配置。",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "是否启用分页抓取",
+                "default": false
+              },
+              "max_pages": {
+                "type": "integer",
+                "description": "最多抓取页数，防止因页面结构解析错误导致无限翻页",
+                "minimum": 1,
+                "default": 3
+              },
+              "url_pattern": {
+                "type": ["string", "null"],
+                "description": "分页 URL 模板，用 {page} 占位。例如 index_1.shtml 形式",
+                "default": null
+              }
+            },
+            "default": null
+          },
+          "selectors": {
+            "type": ["object", "null"],
+            "description": "CSS 选择器配置，供 html_list 抓取器使用。把选择器放进配置而非写死在代码里，是为了网站改版时能只改 YAML 而不动代码。",
+            "additionalProperties": false,
+            "properties": {
+              "item": {
+                "type": "string",
+                "description": "列表项容器的 CSS 选择器"
+              },
+              "title": {
+                "type": "string",
+                "description": "标题元素选择器（相对 item）"
+              },
+              "link": {
+                "type": "string",
+                "description": "链接元素选择器（相对 item）"
+              },
+              "date": {
+                "type": ["string", "null"],
+                "description": "日期元素选择器（相对 item）。无法从列表页取到日期时为 null，此时需进入详情页解析。",
+                "default": null
+              }
+            },
+            "default": null
+          },
+          "api": {
+            "type": ["object", "null"],
+            "description": "JSON 接口配置，供 json_search_list 抓取器使用。【本项目最重要的配置项】实测发现中国政府监管网站的列表页绝大多数由 JavaScript 渲染，纯 HTML 抓取拿不到条目，必须调用其内部 JSON 接口。而这些接口大量复用同一套 CMS 模式（形如 /searchList/{channelId}?_isJson=true&page=N），因此把接口调用参数化后，一个抓取器就能覆盖多个站点。注意：此类内部接口非公开文档化，可能随时变更，因此抓取器必须有降级与告警能力。",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "接口路径，可含 {channel_id} 占位符。例如 /searchList/{channel_id}"
+              },
+              "method": {
+                "type": "string",
+                "description": "HTTP 方法。此类 CMS 接口绝大多数为 GET",
+                "enum": ["GET", "POST"],
+                "default": "GET"
+              },
+              "channel_id": {
+                "type": ["string", "null"],
+                "description": "栏目标识。同一站点不同栏目对应不同 channel_id，需从列表页的导航链接中提取（形如 common_list.shtml?channelid=xxx）。",
+                "default": null
+              },
+              "params": {
+                "type": "object",
+                "description": "请求参数。值支持 {page} 占位符（页码）与 {page_size} 占位符。布尔值需写成字符串形式（如 \"true\"），因为部分接口不接受 JSON 布尔。",
+                "additionalProperties": {"type": "string"},
+                "default": {}
+              },
+              "items_path": {
+                "type": "string",
+                "description": "结果数组在响应 JSON 中的路径，用点号分隔。例如 data.results 表示取 response['data']['results']。",
+                "default": "data.results"
+              },
+              "total_path": {
+                "type": ["string", "null"],
+                "description": "总条数在响应 JSON 中的路径，用于判断是否已到末页。为 null 时改用「本页条数少于 page_size」判断。",
+                "default": null
+              },
+              "field_map": {
+                "type": "object",
+                "description": "字段映射：把本站点的 JSON 字段名映射到本项目的标准字段。键为 title / url / date，值为该站点响应中的字段名。这样不同站点的命名差异（docTitle vs title、publishDate vs publishedTime）只需在配置中声明，无需改代码。",
+                "additionalProperties": {"type": "string"},
+                "default": {}
+              },
+              "url_template": {
+                "type": ["string", "null"],
+                "description": "详情页链接模板，仅在接口不直接返回链接字段时使用。用条目自身的字段填充，形如 https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId={docId}。作用：让「接口只给文档 id、详情页地址需按规则拼接」的站点也能走配置驱动，而不必为它写一个专用抓取器。模板中若引用了条目里不存在的字段，该条目会被丢弃而不是生成一个打不开的残缺链接。",
+                "default": null
+              },
+              "page_size": {
+                "type": "integer",
+                "description": "每页条数，用于判断末页与组装请求参数",
+                "minimum": 1,
+                "default": 18
+              }
+            },
+            "default": null
+          },
+          "filters": {
+            "type": ["object", "null"],
+            "description": "过滤规则。用于从海量一般性公告中筛出与 AI 合规相关的条目，降低人工核验负担。",
+            "additionalProperties": false,
+            "properties": {
+              "include_keywords": {
+                "type": "array",
+                "description": "标题包含任一关键词才纳入。为空表示不按关键词筛选。",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "exclude_keywords": {
+                "type": "array",
+                "description": "标题包含任一关键词即排除，优先级高于 include_keywords",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              }
+            },
+            "default": null
+          },
+          "notes": {
+            "type": ["string", "null"],
+            "description": "数据源备注。记录已知的网络可达性问题、反爬情况、结构变更历史等——这些信息对下一个接手的人极其宝贵。",
+            "default": null
+          }
+        }
+      }
+    }
+  }
+}

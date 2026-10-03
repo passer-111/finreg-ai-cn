@@ -1,0 +1,130 @@
+# ============================================================
+# 政策记录：关于规范金融业开源技术应用与发展的意见
+# ------------------------------------------------------------
+# 为何这条记录重要：金融监管总局 2026 年的 AI 指导意见明确引用了
+# 开源技术管理与供应链安全要求，而这条 2021 年的文件是那个要求的
+# 制度源头。理解这条文件，才能理解 2026 年新规的立法意图。
+#
+# 这也是本项目「上位依据链」价值的一个示例——
+# 孤立看一条政策，往往看不出它为什么这样规定。
+# ============================================================
+
+# ---- 身份标识 ----
+id: pbc-2021-open-source-tech                    # 唯一标识
+title: 关于规范金融业开源技术应用与发展的意见      # 官方全称（五部门联合发布）
+title_en: null                                   # 未查到官方英文版
+issuer: 中国人民银行、中央网络安全和信息化委员会办公室、工业和信息化部、中国银行保险监督管理委员会、中国证券监督管理委员会  # 五部门联合发布
+issuer_code: pbc                                 # 主发文机关代码（人民银行牵头）
+doc_number: null                                 # 公开页面未标注发文字号
+
+# ---- 法域 ----
+jurisdiction: CN                                 # 法域
+jurisdiction_detail: null                        # 国家层面文件
+
+# ---- 效力判断 ----
+instrument_type: 部门规范性文件                    # 层级：五部门联合印发的意见
+bindingness: soft-law                            # 约束力：正文以「应当」「鼓励」「支持」为主，
+                                                 # 不直接设定处罚后果，但构成明确的监管要求
+ai_relevance: related                            # 相关度：主体是开源技术管理，不专指 AI；
+                                                 # 但 AI 模型与工具链大量依赖开源组件，直接适用
+domain:                                          # 所属领域
+  - 金融                                          # 金融领域
+  - 金融科技                                       # 技术治理
+  - 网络安全                                       # 供应链安全
+topics:                                          # 主题标签
+  - open-source-management                       # 开源技术管理（核心主题）
+  - supply-chain                                 # 供应链风险
+  - cybersecurity                                # 网络安全
+  - outsourcing                                  # 第三方管理
+
+# ---- 时效性 ----
+status: effective                                # 当前状态：现行有效
+published_on: 2021-09-28                         # 文件落款日期
+effective_from: 2021-09-28                       # 生效日期：此类意见通常自发布之日起施行（待核验）
+effective_until: null                            # 无固定失效期限
+supersedes: []                                   # 未取代先前文件
+superseded_by: null                              # 未被取代
+amends: []                                       # 未修订任何文件
+amended_by: []                                   # 未被修订
+
+# ---- 版本链 ----
+versions:
+  - version: 1                                   # 首版
+    published_on: 2021-09-28                     # 公布日期
+    effective_from: 2021-09-28                   # 生效日期
+    effective_until: null                        # 尚未失效
+    status: effective                            # 现行有效
+    url: https://www.cac.gov.cn/2021-10/27/c_1636928705274546.htm  # 官方原文链接（网信办转载官方全文）
+    archived_url: null                           # 官方页面可访问
+    content_hash: null                           # 未计算摘要
+    change_note: null                            # 首版
+
+# ---- 来源溯源 ----
+source:
+  url: https://www.cac.gov.cn/2021-10/27/c_1636928705274546.htm  # 官方原文链接
+  site: cac.gov.cn                               # 来源站点（网信办发布官方全文）
+  tier: primary                                  # 官方原始渠道
+  fetched_at: 2026-10-03T12:00:00+08:00          # 整理时间
+  http_status: null                              # 未执行抓取
+  content_hash: null                             # 未计算摘要
+  snapshot_path: null                            # 未保存快照
+
+# ---- 核验台账 ----
+last_verified: 2026-10-03                        # 最近核验日期
+verified_by: automated                           # 检索整理，尚未人工核对
+verified_note: 文件落款日期 2021-09-28 已从官方全文确认；官网公开转载日期为 2021-10-27（网信办）。effective_from 取落款日期，需核验原文是否载明施行日期条款。
+
+# ---- 适用主体 ----
+applicable_to:                                   # 原文明确的适用主体
+  - 金融机构                                      # 全部持牌金融机构
+
+# ---- 关键义务 ----
+key_obligations:
+  - clause: 二                                     # 条款定位
+    summary: 金融机构使用开源技术应坚持安全可控、合规使用、问题导向、开放创新四项原则，开展事前技术评估和安全评估
+    obligation_type: requires-assessment           # 需开展评估
+    tags:
+      - open-source-management                     # 开源治理原则
+      - cybersecurity                              # 安全评估
+
+  - clause: 五                                     # 条款定位
+    summary: 应建立健全开源技术应用管理制度体系，规范引入审批、技术评估、合规使用、漏洞检测、更新维护、应急处置、停用退出等行为
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - open-source-management                     # 管理制度
+      - supply-chain                               # 全流程管理
+
+  - clause: 七                                     # 条款定位
+    summary: 应建立开源技术应用台账，及时掌握开源许可证变更、漏洞、闭源、停服等变化情况，实行常态化管理
+    obligation_type: requires-recordkeeping        # 需留存台账
+    tags:
+      - open-source-management                     # 应用台账
+      - supervision-and-reporting                  # 常态化管理
+
+  - clause: 十                                     # 条款定位
+    summary: 应对开源技术版权、专利、商标、声明等进行事前合规审查，通过审查许可证遵从性与兼容性、梳理依赖关系，避免法律纠纷
+    obligation_type: requires-assessment           # 需合规审查
+    tags:
+      - open-source-management                     # 许可证合规
+
+  - clause: 十一                                   # 条款定位
+    summary: 应制定应急处置预案，应对开源技术潜在漏洞、后门及闭源、停服等突发情况，并定期开展演练
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - supply-chain                               # 应急处置
+      - business-continuity                        # 业务连续性
+
+  - clause: 十二                                   # 条款定位
+    summary: 应加强开源技术供应链管理，通过合同或协议条款明确开源技术提供商的义务和责任
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - supply-chain                               # 供应链合同
+      - outsourcing                                # 第三方责任
+
+# ---- 其它 ----
+language: zh-CN                                  # 正文语言
+tags:                                            # 自由标签
+  - 人民银行牵头                                   # 发文机关特征
+  - 五部门联合发布                                  # 发文形式
+  - 上位依据                                      # 标注其作为后续规定依据的地位
+notes: 共二十条。发布机关中「中国银行保险监督管理委员会」已于 2023 年改组为国家金融监督管理总局，但本文件署名沿用原机构名称，本记录按官方原文保留「中国银行保险监督管理委员会」。与 AI 合规的关联点：金融机构引入的开源大模型、推理框架、向量库、Agent 框架均属本办法界定的「开源技术」，因此第七条的开源软件管理台账义务、第十条的许可证合规审查义务直接覆盖 AI 技术栈。2026 年金融监管总局 AI 指导意见第十九条要求「建立开源软件管理台账，对外部引入的开源组件应进行审查评估，防范供应链投毒」，即是对本办法要求的延续与强化。

@@ -1,0 +1,334 @@
+# ============================================================
+# 定时抓取 —— 本项目「实时」二字的落地方式
+#
+# 做什么
+# ------
+# 按固定时间访问各监管机构官网，把「库里还没有的条目」写入
+# data/changes/YYYY-MM-DD.json，然后自动提交。
+#
+# 本流程刻意**不碰** data/policies/
+# --------------------------------
+# 这是本项目的核心纪律，不是偷懒：
+# data/policies/ 存放的是经人工核验、带官方原文链接与生效/失效日期的
+# 结构化记录，其字段值必须由人从官方原文中读出来。
+# 让抓取器（或任何自动程序）直接往那里写记录，等于把「不可核验」
+# 引入了知识库的根子上——而「可核验」正是本项目区别于二手汇编的唯一理由。
+#
+# 因此自动化的边界画得很清楚：
+#     抓取器负责「发现」，人负责「认定」。
+# data/changes/ 里的内容是**候选**，未经核验，不能当作合规依据。
+#
+# 失败如何处理
+# ------------
+# 单个源失败不会让整个流程失败——这是预期内的常态（政府网站经常改版）。
+# 但失败必须被**看见**：流程会把 failed / degraded 的源写进任务摘要，
+# 并自动开一个 issue 长期跟踪。
+# 理由：一个源静默失效后，报告看起来依然「一切正常」，
+# 使用者会把它读成「最近没有新政策」，而真相是我们的抓取坏了。
+# 这两种情况的处置方式完全不同，绝不能长得一样。
+# ============================================================
+
+# 流程名，显示在 Actions 页面
+name: 定时抓取
+
+# 触发条件
+on:
+  # 定时触发
+  schedule:
+    # 北京时间每天 06:00。
+    # GitHub 的 cron 使用 UTC，北京时间 = UTC+8，故 06:00 − 8 小时 = 前一日 22:00。
+    # 另外需要知道：GitHub 的定时任务在整点高峰期可能被推迟几分钟到几十分钟，
+    # 这是平台行为。本流程不依赖精确时刻，因此可以接受。
+    - cron: "0 22 * * *"
+
+  # 手动触发。两个实际用途：
+  #   1) 某个源昨天失败了，现在单独重试它（填 source）
+  #   2) 先试跑看看结果，不写文件（勾选 dry_run）
+  workflow_dispatch:
+    inputs:
+      # 只抓指定源，便于针对性重试
+      source:
+        description: 只抓取指定数据源 id（留空表示抓取全部启用的源）
+        required: false
+        default: ""
+        type: string
+      # 试跑开关
+      dry_run:
+        description: 只输出报告，不写入也不提交变更流文件
+        required: false
+        default: false
+        type: boolean
+
+# 权限：需要写仓库（提交变更流）与写 issue（跟踪失效源）
+permissions:
+  contents: write
+  issues: write
+
+# 【关键】抓取流程绝不并发。
+#
+# 两个抓取任务同时运行会同时写 data/changes/<同一天>.json 并各自提交，
+# 后提交的那个要么冲突、要么把前一个的发现整段覆盖掉。
+# 这属于「数据静悄悄地少了一部分」，比直接报错危险得多。
+#
+# cancel-in-progress 必须为 false：中途取消可能留下写了一半的文件。
+# 宁可排队等一次，也不要并发。
+concurrency:
+  group: fetch
+  cancel-in-progress: false
+
+
+jobs:
+  fetch:
+    name: 抓取监管政策
+    runs-on: ubuntu-latest
+    # 个别政府网站偶发慢响应，给足时间但保留上限，防止任务永久挂死
+    timeout-minutes: 30
+
+    steps:
+      # 拉取仓库代码
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      # 安装 Python 并开启依赖缓存
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      # 安装运行时依赖。版本来自 requirements.txt 的精确锁定，
+      # 保证今天跑出来的结果和将来某天跑出来的结果一致。
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e . --no-deps
+
+      # --------------------------------------------------------
+      # 第 1 步：执行抓取
+      # --------------------------------------------------------
+      # 【重要提醒】本步骤依赖 GitHub 运行器能访问中国政府网站。
+      # GitHub 的运行器在境外，部分站点可能存在境外访问缓慢甚至被拒绝的情况。
+      # 因此**首次启用本流程时，请先手动触发一次并确认结果**，
+      # 不要假设一切正常——若某个源在境外不可达，它会稳定地报 failed，
+      # 此时应把该源改为在境内机器上手动抓取，而不是让它每天刷一条失败。
+      - name: 执行抓取
+        # 入参通过环境变量传进脚本，避免直接拼进命令行导致注入问题
+        env:
+          INPUT_SOURCE: ${{ inputs.source }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          # 基础参数：输出 JSON 便于后续步骤解析
+          args=(fetch --json)
+          # 指定了源则只抓该源
+          if [ -n "${INPUT_SOURCE:-}" ]; then
+            args+=(--source "$INPUT_SOURCE")
+          fi
+          # 勾选了试跑则不落盘
+          if [ "${INPUT_DRY_RUN:-}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          echo "执行命令：finreg ${args[*]}"
+          # 结果写入文件供后续步骤读取。
+          # 注意：即使有源失败，命令仍以退出码 0 结束（单源隔离是预期行为），
+          # 因此这里不会因为「某个源坏了」而中断；是否告警由下一步判断。
+          finreg "${args[@]}" > fetch-report.json
+
+      # --------------------------------------------------------
+      # 第 2 步：汇总结果，并准备提交信息与 issue 正文
+      # --------------------------------------------------------
+      - name: 汇总结果
+        id: summarize
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          # 读取上一步产出的报告
+          report = json.loads(pathlib.Path("fetch-report.json").read_text(encoding="utf-8"))
+          summary = report["summary"]
+          results = report["fetch_results"]
+          # dry-run 时 change_set 依然存在，这里仍做一次空值兜底
+          change_set = report.get("change_set") or {}
+
+          # failed 与 degraded 都算「存在覆盖缺口」，必须上报。
+          # degraded 尤其不能放过：它的含义是「抓取器跑通了，但一条都没解析出来」——
+          # 这正是站点改版、选择器失效的典型征兆：看起来成功，实际是失明。
+          bad = [r for r in results if r["status"] in ("failed", "degraded")]
+          # 跳过的源不算异常：它们是配置里主动禁用的，或需要人工录入的
+          skipped = [r for r in results if r["status"] == "skipped"]
+
+          # 组装 Markdown 报告
+          rows = [
+              "## 抓取结果",
+              "",
+              f"- 发现条目：{summary['total_docs_discovered']}",
+              f"- 变更条数：{change_set.get('change_count', 0)}"
+              f"（高重要性 {change_set.get('high_significance_count', 0)} 条）",
+              f"- 抓取正常：{len(summary['ok_sources'])} 个源",
+              f"- 疑似失效：{len(bad)} 个源",
+              f"- 本次跳过：{len(skipped)} 个源（配置为禁用或人工录入，非异常）",
+              "",
+              "| 数据源 | 状态 | 条目数 | 剔除导航 | 说明 |",
+              "| --- | --- | --- | --- | --- |",
+          ]
+          for r in results:
+              # 说明列可能含换行与竖线，会破坏 Markdown 表格，先做转义
+              note = (r.get("error") or "").replace("|", "\\|").replace("\n", " ").strip()
+              rows.append(
+                  f"| `{r['source_id']}` | {r['status']} | {r['doc_count']} "
+                  f"| {r['dropped_navigation']} | {note} |"
+              )
+          report_md = "\n".join(rows) + "\n"
+
+          # 写入任务摘要：任何人打开 Actions 页面就能看到结果，不必翻日志
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+              fh.write(report_md)
+
+          # 输出给后续步骤使用的判断依据
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"bad_count={len(bad)}\n")
+              fh.write(f"change_count={change_set.get('change_count', 0)}\n")
+
+          # issue 正文：只列有问题的源，并附上可执行的排查建议。
+          # 仅在确实存在失效源时才生成——否则一旦将来有人放宽了触发条件，
+          # 就会开出一张声称「以下源抓取失败」而实际一切正常的假 issue。
+          if bad:
+              issue = [
+                  "**以下数据源本次未能正常抓取**，知识库在这些源上存在覆盖缺口。",
+                  "",
+                  "在缺口修复之前，这些源对应领域内的「无新政策」结论是不可信的——",
+                  "它可能只是我们没抓到，而不是真的没有。",
+                  "",
+                  report_md,
+                  "",
+                  "### 排查建议",
+                  "",
+                  "1. 打开该源的列表页，确认页面结构是否改版。",
+                  "2. 若改版，通常只需改 `data/sources.yaml` 中该源的 `selectors` 或 `api` 配置，**不需要改代码**——"
+                  "这正是本项目把抓取做成「配置驱动」的目的。",
+                  "3. 若确认该源已不可用，请不要直接删除它，而是把 `enabled` 置为 `false` "
+                  "并在 `notes` 里写明原因。保留一条明确的「已知不可用」记录，远好过留一个空白——"
+                  "前者后人能看懂发生过什么，后者只会让人再踩一次同样的坑。",
+                  "",
+                  "> 参考：`data/sources.yaml` 中已有两个被刻意禁用的源（含禁用原因），"
+                  "正是按这个方式处理的。",
+              ]
+              pathlib.Path("issue-body.md").write_text("\n".join(issue) + "\n", encoding="utf-8")
+          else:
+              print("本次无需生成 issue 正文：没有失效源。")
+
+          # 提交信息。写得详细一点：这是机器人提交，读它的人没有对话上下文可参考
+          msg = [f"data: 抓取变更流 {report['run_on']}", ""]
+          msg.append(
+              f"发现条目 {summary['total_docs_discovered']} 条，"
+              f"产生变更 {change_set.get('change_count', 0)} 条"
+              f"（高重要性 {change_set.get('high_significance_count', 0)} 条）。"
+          )
+          msg.append("")
+          if bad:
+              msg.append("覆盖缺口（需人工确认）：")
+              for r in bad:
+                  msg.append(f"- {r['source_id']}：{r['status']} {r.get('error') or ''}".rstrip())
+              msg.append("")
+          msg.append("本次提交由 .github/workflows/fetch.yml 自动生成。")
+          msg.append("")
+          msg.append("注意：data/changes/ 中记录的是「已发现但尚未结构化录入」的候选条目，")
+          msg.append("未经人工核验，不得直接作为合规依据使用。")
+          pathlib.Path("commit-message.txt").write_text("\n".join(msg) + "\n", encoding="utf-8")
+
+          # 在日志里留一行明确结论，便于扫一眼就知道好坏
+          print(f"汇总完成：正常 {len(summary['ok_sources'])} 个源，疑似失效 {len(bad)} 个源")
+          PY
+
+      # --------------------------------------------------------
+      # 第 3 步：提交前过数据闸门
+      # --------------------------------------------------------
+      # 为什么这一步必须有，而且要放在提交之前：
+      #
+      # 本流程用内置的 GITHUB_TOKEN 提交，而**用 GITHUB_TOKEN 产生的推送
+      # 不会触发其他工作流**（GitHub 为防止递归触发而如此设计）。
+      # 也就是说，这个机器人提交**不会**触发 validate.yml。
+      # 所以 data/changes/ 这一提交路径上，唯一的闸门就是下面这两条命令。
+      # 如果把它们去掉，机器人就有了一个绕过校验的提交通道。
+      #
+      # 另外，放在提交前还有个好处：一旦校验失败，本次抓取的结果不会被写入仓库，
+      # 排查时就不必去分辨「是这次抓取弄坏的」还是「本来就坏的」。
+      - name: 校验数据完整性（提交前闸门）
+        run: |
+          finreg validate-sources
+          finreg validate
+
+      # --------------------------------------------------------
+      # 第 4 步：提交变更流文件
+      # --------------------------------------------------------
+      - name: 提交变更流文件
+        # dry_run 时不提交。
+        # 定时触发时 inputs.dry_run 为空值，条件同样成立（空 ≠ true），
+        # 因此自动运行会正常提交，无需额外分支。
+        #
+        # 这里必须显式写上 success()：GitHub Actions 的隐含规则是
+        # 「前面步骤都成功才执行本步骤」，但一旦给步骤写了 if，这条隐含规则
+        # 就被**取代**了。若不写 success()，上一步的校验闸门失败后
+        # 本步骤仍会照常提交——闸门会形同虚设。
+        if: ${{ success() && inputs.dry_run != true }}
+        run: |
+          set -euo pipefail
+          # 机器人身份。邮箱用 GitHub 提供的 noreply 地址，
+          # 避免把真实邮箱写进提交记录
+          git config user.name "finreg-bot"
+          git config user.email "finreg-bot@users.noreply.github.com"
+          # 只暂存这两个目录。
+          # 即使本次抓取意外改动了别的文件，也不会被顺手带进这次提交——
+          # 机器人提交必须做到「范围可预测」，否则 diff 会变得没人敢审。
+          # 这两个目录都在仓库中带有 .gitkeep，因此新克隆里也一定存在。
+          git add -- data/changes data/snapshots
+          # 没有任何暂存内容说明本次没有新发现，直接结束，避免产生空提交
+          if git diff --cached --quiet; then
+            echo "本次没有新增变更，跳过提交。"
+            exit 0
+          fi
+          # 用文件传提交信息，避免多行文本在命令行里被转义破坏
+          git commit -F commit-message.txt
+          git push
+          echo "已提交并推送变更流文件。"
+
+      # --------------------------------------------------------
+      # 第 5 步：源异常时开 issue
+      # --------------------------------------------------------
+      # 这一步是本项目「明确失败优于静默错误」原则在运维层面的体现。
+      # 没有它，一个长期失效的源只会安静地躺在日志里，
+      # 而知识库会带着一个没人知道的覆盖缺口继续对外服务。
+      - name: 抓取源异常时开启或更新 issue
+        # 同样必须显式写 success()，理由见上一步的说明。
+        # 另外注意：提交失败（如分支保护拦截）时也不应该去开 issue——
+        # 那属于另一个问题，混在一起会让人误判成因。
+        if: ${{ success() && steps.summarize.outputs.bad_count != '0' }}
+        env:
+          # 使用内置 token 调用 gh 命令行，无需额外配置 secret
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # 先查有没有未关闭的同类 issue。
+          # 不这么做的话，一个连续几周失效的源会每天开一个新 issue，
+          # 很快把 issue 列表刷满，反而没人再看。
+          existing=$(gh issue list \
+            --state open \
+            --search "抓取源异常 in:title" \
+            --limit 1 \
+            --json number \
+            --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            # 已有则追加评论，保留完整的时间线，能看出问题是持续的还是偶发的
+            gh issue comment "$existing" --body-file issue-body.md
+            echo "已更新既有 issue #${existing}"
+          else
+            # 没有则新建，标题带日期便于按时间检索
+            gh issue create \
+              --title "抓取源异常：$(date -u +%Y-%m-%d)" \
+              --body-file issue-body.md
+          fi

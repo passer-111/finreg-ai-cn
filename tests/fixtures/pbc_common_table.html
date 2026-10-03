@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<!--
+  本文件是**合成数据**，不是真实的政府网站页面。
+  页面结构照搬 2026-10-03 对 www.pbc.gov.cn 规范性文件列表页的实测结果：
+  人行历史页面使用 <table> 布局，标题在行内 <a>，日期在行内最后一个 <td>。
+  关键还原点：页面中同时存在「栏目导航行」（无日期、链接比列表页浅）
+  与「政策行」（有日期、链接比列表页深一层），
+  用于测试 drop_probable_navigation 能否只剔除前者。
+  所有标题与链接均为自造。
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="gb2312">
+  <title>规范性文件</title>
+</head>
+<body>
+  <!-- 页头导航：这些是栏目入口，没有日期，链接层数不比列表页更深 -->
+  <table class="layout">
+    <tr><td><a href="http://www.pbc.gov.cn/goutongjiaoliu/113456/113469/index.html">新闻发布</a></td></tr>
+    <tr><td><a href="http://www.pbc.gov.cn/zhengwugongkai/4081330/4081338/index.html">政务公开</a></td></tr>
+    <tr><td><a href="http://www.pbc.gov.cn/chubanwu/114566/index.html">网送文告</a></td></tr>
+    <!-- 这一行是本次测试的重点：标题「金融科技」含关键词「科技」，
+         若不剔除，它会在关键词过滤后成为唯一命中项，使流水线在抓到 0 条
+         真实政策的情况下报告 ok。 -->
+    <tr><td><a href="http://www.pbc.gov.cn/kejisi/146812/index.html">金融科技</a></td></tr>
+  </table>
+
+  <!-- 正文列表：真实政策行，链接在列表页路径下多一层文档标识，末列是日期 -->
+  <table class="list">
+    <tr>
+      <th>标题</th><th>发布日期</th>
+    </tr>
+    <tr>
+      <td><a href="http://www.pbc.gov.cn/tiaofasi/144941/3581332/2026091114591687697/index.html">中国人民银行公告〔2026〕第24号</a></td>
+      <td>2026-09-11</td>
+    </tr>
+    <tr>
+      <td><a href="http://www.pbc.gov.cn/tiaofasi/144941/3581332/2026082817013334439/index.html">中国人民银行关于印发《金融科技发展规划（2026—2030年）》的通知</a></td>
+      <td>2026-08-28</td>
+    </tr>
+    <tr>
+      <td><a href="http://www.pbc.gov.cn/tiaofasi/144941/3581332/2026042416471211132/index.html">中国人民银行 工业和信息化部 市场监管总局关于规范金融业数据治理有关事宜的通知</a></td>
+      <td>2026-04-24</td>
+    </tr>
+  </table>
+
+  <!-- 页脚：分页导航文字，会被 PbcFetcher 的 _PAGINATION_NOISE 过滤掉 -->
+  <table class="pager">
+    <tr><td><a href="index1.html">下一页</a> <a href="index2.html">尾页</a> 共 3 页 当前第 1 页</td></tr>
+    <tr><td><a href="http://www.pbc.gov.cn/tiaofasi/144941/3581332/index.html">法律声明</a></td></tr>
+  </table>
+</body>
+</html>

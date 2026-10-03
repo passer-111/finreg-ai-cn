@@ -1,0 +1,128 @@
+# ============================================================
+# 政策记录：互联网信息服务深度合成管理规定
+# ------------------------------------------------------------
+# 这条规定是「AI 生成内容标识」制度的源头：
+# 《人工智能生成合成内容标识办法》正是依据本规定修订完善的。
+# 对金融机构而言，其意义在于界定了「深度合成」的技术范围——
+# 包括文本生成、语音生成、图像生成、虚拟人物生成，
+# 这意味着 AI 客服语音、合成研报插图、虚拟数字人投顾均在其覆盖范围内。
+# ============================================================
+
+# ---- 身份标识 ----
+id: cac-2023-deep-synthesis                      # 唯一标识
+title: 互联网信息服务深度合成管理规定              # 官方全称
+title_en: null                                   # 未查到官方英文版
+issuer: 国家互联网信息办公室、工业和信息化部、公安部  # 三部门联合发布
+issuer_code: cac                                 # 主发文机关代码
+doc_number: null                                 # 公开页面未标注发文字号
+
+# ---- 法域 ----
+jurisdiction: CN                                 # 法域
+jurisdiction_detail: null                        # 国家层面
+
+# ---- 效力判断 ----
+instrument_type: 部门规章                          # 层级：三部门联合发布的部门规章
+bindingness: binding                             # 约束力：设定强制义务与备案要求
+ai_relevance: core                               # 相关度：深度合成即生成式 AI 的技术基础
+
+# ---- 所属领域与主题 ----
+domain:                                          # 所属领域
+  - 人工智能                                      # AI 领域
+  - 金融                                         # 金融场景相关
+  - 数据                                         # 生物识别信息处理
+topics:                                          # 主题标签
+  - deep-synthesis                               # 深度合成（核心主题）
+  - content-labeling                             # 内容标识
+  - algorithm-filing                             # 算法备案
+  - personal-information                         # 生物识别信息保护
+  - supervision-and-reporting                     # 安全评估
+
+# ---- 时效性 ----
+status: effective                                # 当前状态：现行有效
+published_on: 2022-11-25                         # 公布日期
+effective_from: 2023-01-10                       # 生效日期
+effective_until: null                            # 无固定失效期限
+supersedes: []                                   # 未取代先前文件
+superseded_by: null                              # 未被取代
+amends: []                                       # 未修订任何文件
+amended_by: []                                   # 未被修订
+
+# ---- 版本链 ----
+versions:
+  - version: 1                                   # 首版
+    published_on: 2022-11-25                     # 公布日期
+    effective_from: 2023-01-10                   # 生效日期
+    effective_until: null                        # 尚未失效
+    status: effective                            # 现行有效
+    url: https://www.cac.gov.cn/2022-12/11/c_1672221949354811.htm  # 官方原文链接
+    archived_url: null                           # 官方页面可访问
+    content_hash: null                           # 未计算摘要
+    change_note: null                            # 首版
+
+# ---- 来源溯源 ----
+source:
+  url: https://www.cac.gov.cn/2022-12/11/c_1672221949354811.htm  # 官方原文链接
+  site: cac.gov.cn                               # 来源站点
+  tier: primary                                  # 官方原始渠道
+  fetched_at: 2026-10-03T12:00:00+08:00          # 整理时间
+  http_status: null                              # 未执行抓取
+  content_hash: null                             # 未计算摘要
+  snapshot_path: null                            # 未保存快照
+
+# ---- 核验台账 ----
+last_verified: 2026-10-03                        # 最近核验日期
+verified_by: automated                           # 检索整理，尚未人工核对
+verified_note: 公布日期 2022-11-25、施行日期 2023-01-10 为通行表述，详情页 URL 待人工确认。
+
+# ---- 适用主体 ----
+applicable_to:                                   # 原文明确的适用主体
+  - 深度合成服务提供者                             # 主要适用主体
+  - 深度合成服务技术支持者                          # 技术支持方同样适用
+
+# ---- 关键义务 ----
+key_obligations:
+  - clause: 第十四条                               # 条款定位
+    summary: 深度合成服务提供者和技术支持者应当加强训练数据管理，采取必要措施保障训练数据安全；训练数据包含个人信息的，应当遵守法律、行政法规有关个人信息保护的规定
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - data-quality                               # 训练数据管理
+      - personal-information                       # 个人信息保护
+
+  - clause: 第十六条                               # 条款定位
+    summary: 深度合成服务提供者应当依法履行算法备案手续，在提供对公众服务前进行安全评估
+    obligation_type: requires-reporting            # 需备案与评估
+    tags:
+      - algorithm-filing                           # 算法备案
+      - supervision-and-reporting                   # 安全评估
+
+  - clause: 第十七条                               # 条款定位
+    summary: 提供智能对话、合成人声、人脸生成、沉浸式拟真场景等具有生成或显著改变信息内容功能服务的，应当进行显著标识，避免公众混淆或误认
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - content-labeling                           # 显著标识（后续标识办法的依据）
+
+  - clause: 第十八条                               # 条款定位
+    summary: 不得删除、篡改、隐匿深度合成标识；不得利用技术手段删除、篡改、隐匿标识
+    obligation_type: prohibition                   # 禁止性要求
+    tags:
+      - content-labeling                           # 标识完整性
+
+  - clause: 第十九条                               # 条款定位
+    summary: 提供人脸、人声等生物识别信息编辑功能的，应当提示深度合成服务使用者依法告知被编辑的个人并取得其单独同意
+    obligation_type: mandatory                     # 强制性要求
+    tags:
+      - personal-information                       # 生物识别信息单独同意
+
+  - clause: 第二十条                               # 条款定位
+    summary: 深度合成服务提供者应当建立健全用于识别违法和不良信息的特征库，完善入库标准、规则和程序，记录并留存相关日志信息
+    obligation_type: requires-recordkeeping        # 需留存记录
+    tags:
+      - supervision-and-reporting                  # 特征库与日志
+
+# ---- 其它 ----
+language: zh-CN                                  # 正文语言
+tags:                                            # 自由标签
+  - 网信办牵头                                    # 发文机关特征
+  - 三部门联合发布                                 # 发文形式
+  - 标识制度源头                                   # 定位标注
+notes: 共二十五条。第二条界定的深度合成技术范围包括利用生成合成类算法制作文本、图像、音频、视频、虚拟场景等信息的技术，具体涵盖文本生成、语音生成、音乐生成、图像生成、虚拟人物生成等。对金融机构的意义：①若使用语音合成技术生成客服语音，或使用虚拟数字人提供服务，均落入本规定适用范围；②第十七条的显著标识要求，在标注「具有生成或显著改变信息内容功能」的场景时即触发，是《人工智能生成合成内容标识办法》的立法基础；③第十九条关于人脸、人声编辑需取得被编辑个人单独同意的要求，对涉及身份核验、视频双录的金融业务有直接影响。本规定已由 2025 年施行的《人工智能生成合成内容标识办法》在标识方面作了进一步细化。

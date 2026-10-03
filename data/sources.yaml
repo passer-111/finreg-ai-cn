@@ -1,0 +1,503 @@
+# ============================================================
+# 数据源登记表（Source Registry）
+# ------------------------------------------------------------
+# 本文件是本项目唯一的「数据来源真相」。所有抓取行为都由它驱动，
+# 抓取器代码里不允许硬编码任何 URL。
+#
+# 这样设计的原因：政府网站会改版、会下架、会合并。当某个源失效时，
+# 我们希望只需修改这一个 YAML 文件就能修复，而不必改代码、走 review、发版。
+#
+# 结构定义见 schema/source.schema.json
+# 校验命令：finreg validate-sources
+#
+# 注意：所有 notes 均为单行字符串。不要用引号伪造多行续写——
+# YAML 中用引号开头却不闭合会直接导致解析失败。
+# ============================================================
+
+# 登记表结构版本号 —— 结构发生不兼容变更时递增
+version: 1
+
+# ============================================================
+# 发布机构字典
+# ------------------------------------------------------------
+# 所有政策记录的 issuer_code 必须在此登记。
+# 目的：消除同一机构的多种写法。如果不同贡献者分别写成
+# 「国家金融监督管理总局」和「金融监管总局」，检索就会漏结果。
+# ============================================================
+issuers:
+
+  # ---- 立法与行政层面 ----
+  - code: npc                          # 机构短代码，用作政策 id 前缀
+    name: 全国人民代表大会               # 官方全称，写入政策记录时用这个值
+    abbr: 全国人大                       # 常用简称，仅用于显示和检索
+    domain: npc.gov.cn                 # 官网域名，用于校验政策记录的 source.site
+    homepage: http://www.npc.gov.cn/   # 官网首页
+    authority_level: national-law      # 层级：国家立法机关，可制定法律
+    notes: 法律层级文件的来源；本项目中主要作为上位法背景（如网络安全法），一般不直接产生 AI 合规义务，但对义务解释至关重要  # 备注：说明该源在项目中的实际作用，避免贡献者误以为需要在这里找 AI 专项规定
+
+  - code: state_council                # 国务院
+    name: 国务院                        # 官方全称
+    abbr: null                         # 无更短简称
+    domain: gov.cn                     # 国务院文件常发布于中央政府门户
+    homepage: https://www.gov.cn/      # 官网首页
+    authority_level: state-council     # 层级：可制定行政法规
+    notes: 行政法规与国务院规范性文件的来源，如《关于深入实施"人工智能+"行动的意见》  # 备注：国务院文件常作为部门规章的上位依据，是理解部门文件立法意图的关键
+
+  # ---- 中央金融监管部门（本项目核心） ----
+  - code: pbc                          # 中国人民银行
+    name: 中国人民银行                  # 官方全称
+    abbr: 人行                         # 常用简称
+    domain: pbc.gov.cn                 # 官网域名
+    homepage: http://www.pbc.gov.cn/   # 官网首页
+    authority_level: central-regulator # 层级：中央金融监管部门
+    notes: 金融科技发展规划、金融业技术标准、数据治理规则的来源；与金融监管总局、证监会联合发文时署名顺序通常为人行在前  # 备注：实测网络可达性良好（http=200，约 0.4s）
+
+  - code: nfra                         # 国家金融监督管理总局
+    name: 国家金融监督管理总局          # 官方全称，必须写全，不可简写为"金融监管总局"后存入记录
+    abbr: 金融监管总局                  # 常用简称
+    domain: nfra.gov.cn                # 官网域名
+    homepage: https://www.nfra.gov.cn/ # 官网首页
+    authority_level: central-regulator # 层级：中央金融监管部门
+    notes: 【本项目最重要数据源】银行业与保险业监管主体，2026-06-18 发布《关于银行业保险业人工智能安全开发应用的指导意见》，是目前金融领域 AI 合规最直接的纲领性文件  # 备注：2023 年由原银保监会改组而来，历史文件可能存在"银保监会"署名，需一并登记处理
+
+  - code: csrc                         # 中国证监会
+    name: 中国证券监督管理委员会         # 官方全称
+    abbr: 证监会                        # 常用简称
+    domain: csrc.gov.cn                # 官网域名
+    homepage: http://www.csrc.gov.cn/  # 官网首页
+    authority_level: central-regulator # 层级：中央金融监管部门
+    notes: 证券期货业科技监管、算法交易、数据治理规则来源  # 备注：实测网络可达性良好（http=200，约 0.4s），且返回 HTML 含结构化 meta 标签
+
+  - code: cac                          # 国家互联网信息办公室
+    name: 国家互联网信息办公室          # 官方全称
+    abbr: 网信办                        # 常用简称
+    domain: cac.gov.cn                 # 官网域名
+    homepage: http://www.cac.gov.cn/   # 官网首页
+    authority_level: central-regulator # 层级：中央金融监管部门（就 AI 内容监管而言）
+    notes: 【AI 专项法规主要来源】生成式人工智能服务管理暂行办法、深度合成管理规定、算法推荐管理规定、生成合成内容标识办法、拟人化互动服务管理办法均出自此处  # 备注：金融机构的生成式 AI 应用须在此完成备案，因此该源与金融 AI 合规高度耦合
+
+  - code: miit                         # 工业和信息化部
+    name: 工业和信息化部                # 官方全称
+    abbr: 工信部                        # 常用简称
+    domain: miit.gov.cn                # 官网域名
+    homepage: https://www.miit.gov.cn/ # 官网首页
+    authority_level: ministry          # 层级：国务院组成部门
+    notes: AI 产业政策、数据安全、算力相关规则的来源，常与网信办联合发文  # 备注：待启用
+
+  - code: most                         # 科学技术部
+    name: 科学技术部                    # 官方全称
+    abbr: 科技部                        # 常用简称
+    domain: most.gov.cn                # 官网域名
+    homepage: https://www.most.gov.cn/ # 官网首页
+    authority_level: ministry          # 层级：国务院组成部门
+    notes: 《人工智能科技伦理审查与服务办法（试行）》的发布主体，涉及金融 AI 伦理审查义务  # 备注：待启用
+
+  # ---- 标准与自律层面 ----
+  - code: tc260                        # 全国网络安全标准化技术委员会
+    name: 全国网络安全标准化技术委员会   # 官方全称
+    abbr: TC260                        # 常用简称
+    domain: tc260.org.cn               # 官网域名
+    homepage: https://www.tc260.org.cn/ # 官网首页
+    authority_level: standards-body    # 层级：标准制定机构，产出国家标准
+    notes: 人工智能安全治理框架等国家标准的来源  # 备注：国家标准本身不产生法律义务，但被监管文件引用后即具实际约束力，因此需要单独跟踪
+
+  - code: sse                          # 上海证券交易所
+    name: 上海证券交易所                # 官方全称
+    abbr: 上交所                        # 常用简称
+    domain: sse.com.cn                 # 官网域名
+    homepage: http://www.sse.com.cn/   # 官网首页
+    authority_level: exchange          # 层级：交易所，产出业务规则与自律监管指引
+    notes: 对上市公司与会员单位的 AI 应用可能有自律规则，效力对会员具有约束力  # 备注：待启用
+
+  - code: szse                         # 深圳证券交易所
+    name: 深圳证券交易所                # 官方全称
+    abbr: 深交所                        # 常用简称
+    domain: szse.cn                    # 官网域名
+    homepage: http://www.szse.cn/      # 官网首页
+    authority_level: exchange          # 层级：交易所
+    notes: 与上交所规则体系平行  # 备注：待启用
+
+  - code: sac                          # 中国证券业协会
+    name: 中国证券业协会                # 官方全称
+    abbr: 中证协                        # 常用简称
+    domain: sac.net.cn                 # 官网域名
+    homepage: https://www.sac.net.cn/  # 官网首页
+    authority_level: industry-association # 层级：行业自律组织
+    notes: 行业自律规则来源，法律约束力弱于部门规章，但对会员具有实际约束  # 备注：待启用
+
+  - code: cba                          # 中国银行业协会
+    name: 中国银行业协会                # 官方全称
+    abbr: 中银协                        # 常用简称
+    domain: china-cba.net              # 官网域名
+    homepage: https://www.china-cba.net/ # 官网首页
+    authority_level: industry-association # 层级：行业自律组织
+    notes: 银行业自律规则来源  # 备注：待启用
+
+  # ---- 地方层面 ----
+  - code: shanghai                     # 上海市
+    name: 上海市人民政府                # 官方全称
+    abbr: 上海市                        # 常用简称
+    domain: shanghai.gov.cn            # 官网域名
+    homepage: https://www.shanghai.gov.cn/ # 官网首页
+    authority_level: local-government  # 层级：地方政府
+    notes: 上海是国际金融中心，其 AI 与金融科技政策对本地机构有直接约束力  # 备注：因项目发起人在上海，此源优先级高于其他地區
+
+# ============================================================
+# 数据源列表
+# ------------------------------------------------------------
+# 每个数据源对应一个可抓取的官方列表页或栏目。
+# 一个机构可以有多个源（如"规章""公告""征求意见"分属不同栏目）。
+#
+# enabled: false 的源会被流水线跳过并记录，而不是反复失败——
+# 这是"单源失效不拖垮整体"原则的落地方式。
+#
+# 首批只启用 5 个源（含 1 个人工录入源）。刻意不做窄而深，
+# 是为了把「抓取稳定性」和「数据模型正确性」先验证透，
+# 再横向扩展。同时铺 10 个不稳定源，得到的只是 10 个不确定性。
+# ============================================================
+sources:
+
+  # ----------------------------------------------------------
+  # 金融监管总局 —— 本项目最高优先级数据源
+  # ----------------------------------------------------------
+  - id: nfra-regulations               # 源唯一标识，用于变更流和日志定位问题源
+    issuer_code: nfra                  # 关联机构代码，须存在于上方 issuers 列表
+    name: 金融监管总局-规章与规范性文件   # 中文名称，说明这是哪个栏目
+    tier: primary                      # 来源等级：官方原始渠道，唯一允许写入记录的等级
+    enabled: true                      # 启用抓取
+    fetcher: json_search_list          # 【2026-10-03 改为通用 JSON 抓取器】该站返回的是标准 JSON 接口，无需专用抓取器
+    list_url: "https://www.nfra.gov.cn/cn/view/pages/ItemList.html?itemPId=915&itemId=915"  # 列表页地址（仅用于人工点开核对，接口请求不依赖它）
+    schedule: "0 6 * * *"              # 建议抓取频率：每日 06:00（政府网站更新不频繁，无需高频）
+    min_interval_seconds: 5            # 同一源内请求最小间隔，对监管服务器保持礼貌
+    pagination:                        # 分页配置（本抓取器按 api 参数翻页，此处仅作记录）
+      enabled: true                    # 需要翻页才能看全
+      max_pages: 3                     # 翻页上限，实际由抓取器的 ABSOLUTE_MAX_PAGES 兜底
+      url_pattern: null                # 翻页由 api 参数控制，无需 URL 模板
+    selectors: null                    # 该站列表页为 JS 空壳，HTML 选择器不可用
+    api:                               # 【关键配置】JSON 接口 —— 实测可用（2026-10-03）
+      path: "/cbircweb/DocInfo/SelectDocByItemIdAndChild"  # 接口路径。注意基址前缀是 /cbircweb 而非 /cn/static/data
+      method: GET                      # 实测该接口为 GET；用 POST 会返回 rptCode=0「未知错误」
+      params:                          # 请求参数
+        itemId: "915"                  # 栏目标识（915 = 规章与规范性文件），必填
+        pageSize: "{page_size}"        # 每页条数；服务端上限为 20，填更大值也只返回 20
+        pageIndex: "{page}"            # 页码，注意是 1 基（填 0 会返回 rptCode=501「参数错误」）
+      items_path: "data.rows"          # 条目数组位于 data.rows
+      total_path: "data.total"         # 总条数位于 data.total（实测该栏目共 4888 条）
+      # 该接口不返回 HTML 详情页链接，只返回 docId 与文档文件路径，
+      # 因此用模板拼装详情页地址。这是本项目新增 url_template 能力的直接动因。
+      url_template: "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId={docId}"
+      field_map:                       # 字段映射
+        title: "docSubtitle"           # 标题取 docSubtitle：它是单行文本；而 docTitle 内嵌换行符，需额外清洗
+        date: "publishDate"            # 日期取 publishDate，格式为可读字符串「2026-09-29 18:16:53」
+      page_size: 20                    # 每页条数，须与 params.pageSize 一致，同时用于末页判断
+    filters:                           # 关键词过滤，从海量公告中筛出 AI 相关条目
+      include_keywords:                # 标题含以下任一关键词才纳入
+        - 人工智能                       # 最直接的主题词
+        - 智能                          # 覆盖"智能风控""智能投顾"等复合词
+        - 算法                          # 算法治理相关
+        - 模型                          # 模型风险相关
+        - 数据                          # 数据治理相关（噪声较大，但漏检成本高于误检）
+        - 科技                          # 科技监管相关
+      exclude_keywords:                # 标题含以下任一关键词则排除，优先级高于包含规则
+        - 行政处罚                       # 个案处罚决定，不属于政策性文件
+        - 行政许可                       # 机构准入批复，与 AI 合规无关
+        - 人员任免                       # 人事公告
+        # 实测噪声：该栏目每季度发布「银行业保险业主要监管指标数据情况」，
+        # 因标题含「数据」会骗过包含规则。这些是统计发布而非政策，
+        # 用「监管指标」精确排除——比在包含规则里删掉「数据」更稳妥，
+        # 因为「数据治理」「数据安全」类政策正需要「数据」这个词来命中。
+        - 监管指标                       # 季度监管指标统计发布，非政策文件
+    notes: 【2026-10-03 打通，本项目最重要数据源】改动记录与实测结论：①最初假设该站与证监会同族（走 /searchList 接口），实测发现并非同族，其接口基址是 /cbircweb/DocInfo/...；②早期代码里硬编码的 SelectByConditionPageData.json 是凭推测写的接口名，站点上并不存在，返回 404 —— 且因为当时用裸 except 吞掉了异常，这个错误长期不可见；③从站点前端 JS（/cn/js/common/ItemList.js）中读出了真实接口名与调用方式，实测 SelectDocByItemIdAndChild 返回 200 与 rptCode=200；④关键参数语义：itemId 必填、pageIndex 为 1 基、pageSize 服务端上限 20、必须用 GET；⑤Referer 头经实测并非必需（带上更稳妥）；⑥该接口无需 Cookie，也不需要 X-WEB 反爬绕过——之前记录的「403 反爬」结论属于对错误接口地址的误判。结论：该源属标准 JSON 接口，已改用通用 json_search_list 抓取器，专用抓取器 nfra.py 随之删除。  # 备注：这是本领域最核心文件的出处——2026-06-18《关于银行业保险业人工智能安全开发应用的指导意见》即发布于该栏目
+
+  - id: nfra-consultations             # 征求意见栏目 —— 捕捉政策演进的前置信号
+    issuer_code: nfra                  # 关联机构
+    name: 金融监管总局-征求意见          # 栏目名称
+    tier: primary                      # 官方渠道
+    enabled: false                     # 【已禁用，待核实栏目 id】理由见下方 notes——宁可停用，也不要让错误内容入库
+    fetcher: json_search_list          # 与主源同类接口
+    list_url: "https://www.nfra.gov.cn/cn/view/pages/ItemList.html?itemPId=915&itemId=925"  # 待核实的征求意见列表页
+    schedule: "0 6 * * *"              # 每日抓取
+    min_interval_seconds: 5            # 请求间隔
+    pagination:                        # 分页配置
+      enabled: true                    # 需要翻页
+      max_pages: 2                     # 征求意见稿数量少，2 页足够
+      url_pattern: null                # 翻页由 api 参数控制
+    selectors: null                    # 该站列表页为 JS 空壳
+    api:                               # 接口配置（参数待核实后才可启用）
+      path: "/cbircweb/DocInfo/SelectDocByItemIdAndChild"
+      method: GET
+      params:
+        itemId: "925"                  # 【待核实】此 id 是从列表页 URL 中读到的，但实测其返回内容与「征求意见」不符
+        pageSize: "{page_size}"
+        pageIndex: "{page}"
+      items_path: "data.rows"
+      total_path: "data.total"
+      url_template: "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId={docId}"
+      field_map:
+        title: "docSubtitle"
+        date: "publishDate"
+      page_size: 20
+    filters:                           # 过滤规则
+      include_keywords:                # 包含关键词
+        - 人工智能                       # 主题词
+        - 智能                          # 复合词
+        - 算法                          # 算法相关
+        - 模型                          # 模型相关
+      exclude_keywords: []             # 不排除任何项
+    notes: 【已禁用，原因：栏目 id 无法证实】实测发现（2026-10-03）：虽然列表页 URL 写作 itemId=925，但以 925 调用接口返回的却是「机动车交通事故责任强制保险业务情况公告」「法治宣传教育规划通知」「拟录用公务员公示」等文件，与「征求意见稿」完全无关。这说明 925 并非征求意见栏目的真实 id（或该栏目由另一套接口提供）。本项目的处理方式是**停用该源**，而不是保留一个会返回错误内容的配置——若带着这个 id 上线，征求意见稿分类里会混入大量无关公告，且因为抓取状态为 ok，没有任何机制会提示异常。这属于「静默污染」，比抓不到更危险。下一步工作：从站点菜单接口（/cbircweb/DocInfo/SelectItemAndDocByItemPId）或页面导航 DOM 中确认征求意见栏目的真实 itemId 后再启用。  # 备注：征求意见稿是"政策即将落地"的最早公开信号，对合规工作价值极高，值得后续补齐；此类记录的 status 必须为 consultation，bindingness 必须为 consultation
+
+  # ----------------------------------------------------------
+  # 中国人民银行
+  # ----------------------------------------------------------
+  - id: pbc-regulations                # 源标识
+    issuer_code: pbc                   # 关联机构
+    name: 中国人民银行-规范性文件        # 栏目名称
+    tier: primary                      # 官方渠道
+    enabled: true                      # 启用
+    fetcher: pbc                       # 使用 pbc 专用抓取器
+    list_url: "http://www.pbc.gov.cn/tiaofasi/144941/3581332/index.html"  # 规范性文件列表页
+    schedule: "0 6 * * *"              # 每日抓取
+    min_interval_seconds: 5            # 请求间隔
+    pagination:                        # 分页配置
+      enabled: true                    # 人行列表页使用传统分页
+      max_pages: 3                     # 最多 3 页
+      url_pattern: "index{page}.html"  # 第 2 页为 index1.html，以此类推，{page} 由抓取器替换
+    selectors:                         # 通用选择器（pbc 抓取器会以此为兜底）
+      item: "table tr"                 # 人行历史页面大量使用 table 布局而非 div
+      title: "a"                       # 标题链接
+      link: "a"                        # 链接本身
+      date: "td:last-child"            # 日期在行尾的最后一个单元格
+    filters:                           # 过滤规则
+      include_keywords:                # 包含关键词
+        - 人工智能                       # 主题词
+        - 智能                          # 复合词
+        - 算法                          # 算法相关
+        - 金融科技                       # 金融科技专项
+        - 数据                          # 数据治理
+        - 科技                          # 科技监管
+      exclude_keywords:                # 排除关键词
+        - 行政处罚                       # 个案处罚
+        - 人员任免                       # 人事公告
+    notes: 【2026-10-03 修正早期误判，该源实际可用】早期记录写的是「页面中的 63 个 table tr 全部是布局表格，不含政策列表项，说明该栏目地址并非规范性文件列表页」——**这个结论是错的**。实测重跑后使用 table tr + a + td:last-child 选择器可以正常解析出 32 行，其中约 21 行是带日期的真实规范性文件（如「中国人民银行公告〔2026〕第24号」「中国人民银行 国家金融监督管理总局印发《关于改革完善房地产信贷管理 推动…》」等）。早期之所以误判，是把「结果里混有大量栏目导航噪声（新闻发布/政务公开/网送文告/金融科技/法律声明）」误读成了「结果里没有真数据」——这两者的处置方式完全不同：前者只需清洗，后者才需要换方案。据此做了三处修复：①PbcFetcher 改为继承 HtmlListFetcher 以获得分页与去重能力（此前直接继承基类，导致同一公告被重复收录 3 次）；②基类新增 drop_probable_navigation 统一剔除栏目导航链接；③不采用「把日期列当日期」的宽松逻辑，仍校验解析结果是否真像日期。另需注意：页面中的栏目导航链接「金融科技」因标题含关键词「科技」会骗过关键词过滤，是最隐蔽的一类污染——它会让流水线在抓到 0 条真实政策时报 ok，现已由导航识别规则拦下。  # 备注：该源网络可达性良好，是本项目最稳定的源之一
+
+  # ----------------------------------------------------------
+  # 国家互联网信息办公室（AI 专项法规主要来源）
+  # ----------------------------------------------------------
+  - id: cac-ai-regulations             # 源标识
+    issuer_code: cac                   # 关联机构
+    name: 网信办-人工智能相关规章        # 栏目名称
+    tier: primary                      # 官方渠道
+    enabled: false                     # 【已禁用】实测该站点在多个网络环境下超时（http=000），启用会导致每日流水线产生无意义的失败噪音。待确认可访问性后再开启。
+    fetcher: cac                       # 使用 cac 专用抓取器
+    list_url: "https://www.cac.gov.cn/zcfg/A093601index_1.htm"  # 政策法规列表页
+    schedule: "0 6 * * *"              # 每日抓取
+    min_interval_seconds: 5            # 请求间隔
+    pagination:                        # 分页配置
+      enabled: true                    # 需要翻页
+      max_pages: 3                     # 最多 3 页
+      url_pattern: "A093601index_{page}.htm"  # 网信办使用 index_1.htm / index_2.htm 形式
+    selectors:                         # 通用选择器（兜底用）
+      item: "li"                       # 列表项
+      title: "a"                       # 标题链接
+      link: "a"                        # 链接本身
+      date: "span"                     # 日期
+    filters:                           # 过滤规则
+      include_keywords:                # 包含关键词
+        - 人工智能                       # 主题词
+        - 生成式                        # 生成式 AI 专项
+        - 深度合成                       # 深度合成专项
+        - 算法                          # 算法专项
+        - 数据                          # 数据安全
+        - 标识                          # 内容标识
+      exclude_keywords: []             # 不排除任何项
+    notes: 【当前状态：已禁用（网络不可达）】实测结论（2026-10-03）：www.cac.gov.cn 在测试环境下超时（http=000，单次等待 15s 以上仍无响应），可能是网络出口限制或站点防护策略所致，无法确认是否为本项目抓取方式的问题。  # 备注：该源的重要性很高（生成式 AI 暂行办法、标识办法、拟人化互动办法均出自此处），因此在若干记录中已通过人工录入方式补齐，并在 source.tier 中标为 primary、附官方 URL 以保证可追溯。待网络条件改善后应优先恢复自动抓取。
+
+  # ----------------------------------------------------------
+  # 中国证监会 —— 首个打通的数据源（JSON 接口方案）
+  # ----------------------------------------------------------
+  - id: csrc-regulations               # 源标识
+    issuer_code: csrc                  # 关联机构
+    name: 证监会-规章                    # 栏目名称
+    tier: primary                      # 官方渠道
+    enabled: true                      # 启用
+    fetcher: csrc                      # 证监会专用抓取器（JSON 接口 + 站点自检）
+    # 列表页地址必须带 channelid 参数：该站的列表数据由 JS 按 channelid 拉取，
+    # 不带参数的地址无法定位栏目，也无法作为接口请求的 Referer
+    list_url: "https://www.csrc.gov.cn/csrc/c101953/common_list.shtml?channelid=cd11df89f5894c1eac37ae37cc11e369"
+    schedule: "0 6 * * *"              # 每日抓取
+    min_interval_seconds: 5            # 请求间隔
+    pagination:                        # 分页配置（JSON 抓取器主要用 api.page_size 判末页，此处保留作为兜底）
+      enabled: true                    # 需要翻页
+      max_pages: 3                     # 最多 3 页
+      url_pattern: null                # 翻页由 api 参数控制，无需 URL 模板
+    selectors: null                    # 该站列表页为 JS 渲染的空壳，HTML 选择器不可用，故为 null
+    api:                               # 【关键配置】JSON 接口
+      path: "/searchList/{channel_id}" # 接口路径，channel_id 由下方字段填充
+      method: GET                      # 该接口为 GET
+      channel_id: "cd11df89f5894c1eac37ae37cc11e369"  # 栏目 id（从列表页导航链接中提取）
+      params:                          # 请求参数；布尔值必须写成字符串，部分接口不接受 JSON 布尔
+        _isAgg: "true"                 # 聚合查询
+        _isJson: "true"                # 要求返回 JSON（关键参数，缺省会返回 HTML）
+        _pageSize: "18"                # 每页条数；值会同时用于 assembles 请求参数与末页判断
+        _template: "index"             # 模板标识
+        _rangeTimeGte: ""              # 起始时间过滤，留空表示不限
+        _channelName: ""               # 栏目名过滤，留空
+        page: "{page}"                 # 页码占位符，由抓取器替换
+      items_path: "data.results"       # 条目数组在响应中的位置
+      total_path: "data.total"         # 总条数位置（实测该接口返回 total=234）
+      field_map:                       # 字段映射：把该站字段名映射到本项目标准字段
+        title: "title"                 # 标题字段（实测返回的标题含【第235号令】等前缀，属官方原文，保留不改）
+        url: "url"                     # 链接字段
+        # 日期字段选择说明：该接口同时返回 publishedTime（epoch 毫秒整数，如 1786847417000）
+        # 与 publishedTimeStr（可读字符串 "2026-09-11 18:10:17"）。
+        # 本项目选用 epoch 值，因为它不受日期格式变更影响，更稳定；
+        # json_search_list.parse_epoch_timestamp 会按北京时间（UTC+8）解释并处理秒/毫秒两种精度。
+        date: "publishedTime"          # 日期字段（epoch 毫秒）
+      page_size: 18                    # 每页条数，需与 params._pageSize 保持一致
+    filters:                           # 过滤规则
+      include_keywords:                # 包含关键词
+        - 人工智能                       # 主题词
+        - 智能                          # 复合词
+        - 算法                          # 算法交易相关
+        - 科技                          # 科技监管
+        - 数据                          # 数据治理
+        - 信息技术                       # 信息技术管理
+      exclude_keywords:                # 排除关键词
+        - 行政处罚                       # 个案处罚（该站目录含大量处罚决定书，噪声主要来源）
+        - 市场禁入                       # 个人处分
+        - 统计数据                       # 月度统计数据，与政策无关
+        - 警示函                        # 监管措施函件
+        - 采取出具                        # 「采取出具警示函措施的决定」等个案
+    notes: 【已打通的首个数据源，可作为接入其他站点的参考样板】实测结论：①列表页 common_list.shtml 仅约 10 KB 且无列表项，数据由 /searchList/{channelId} 接口返回，共 234 条规章；②接口必须带 _isJson=true，否则返回 HTML；③必须带 Referer 指向列表页，否则可能被拒；④宽泛 HTML 选择器会抓到页脚备案号与统计数据链接，且流水线会误报 ok —— 因此本项目新增了结果质量自检（见 json_search_list.py 的 _passes_quality_check）；⑤该站 meta 标签提供 SiteName 自检信号，CsrcFetcher 据此防止被重定向到非预期页面。  # 备注：这是本项目数据源接入的参考样板，新增站点建议照此结构配置
+
+  # ----------------------------------------------------------
+  # 科学技术部（AI 伦理）—— 第二梯队，暂未启用
+  # ----------------------------------------------------------
+  - id: most-ai-ethics                 # 源标识
+    issuer_code: most                  # 关联机构
+    name: 科技部-人工智能与科技伦理      # 栏目名称
+    tier: primary                      # 官方渠道
+    enabled: false                     # 【暂未启用】首批只做核心源，避免铺太宽
+    fetcher: html_list                 # 使用通用 HTML 列表抓取器
+    list_url: "https://www.most.gov.cn/xxgk/xinxifenlei/fdzdgknr/fgzc/"  # 法规政策栏目
+    schedule: "0 6 * * 1"              # 每周一抓一次即可，该源更新频率低
+    min_interval_seconds: 5            # 请求间隔
+    pagination:                        # 分页配置
+      enabled: false                   # 暂不翻页
+      max_pages: 1                     # 仅首页
+      url_pattern: null                # 无分页模板
+    selectors:                         # 通用选择器
+      item: "li"                       # 列表项
+      title: "a"                       # 标题链接
+      link: "a"                        # 链接本身
+      date: "span"                     # 日期
+    filters:                           # 过滤规则
+      include_keywords:                # 包含关键词
+        - 人工智能                       # 主题词
+        - 伦理                          # 伦理审查专项
+      exclude_keywords: []             # 不排除
+    notes: 待启用。科技部是《人工智能科技伦理审查与服务办法（试行）》的发布主体，金融 AI 涉及伦理审查义务时需要此源  # 备注：首批不启用是因为先把 4 个核心源做稳定，比同时铺 10 个不稳定源更有价值
+
+  # ----------------------------------------------------------
+  # 国家标准（TC260）—— 第二梯队，暂未启用
+  # ----------------------------------------------------------
+  - id: tc260-ai-standards             # 源标识
+    issuer_code: tc260                 # 关联机构
+    name: TC260-人工智能安全标准         # 栏目名称
+    tier: primary                      # 官方渠道
+    enabled: false                     # 【暂未启用】
+    fetcher: html_list                 # 通用抓取器
+    list_url: "https://www.tc260.org.cn/front/bzList.html"  # 标准列表页
+    schedule: "0 6 * * 1"              # 每周一次
+    min_interval_seconds: 5            # 请求间隔
+    pagination:                        # 分页配置
+      enabled: false                   # 暂不翻页
+      max_pages: 1                     # 仅首页
+      url_pattern: null                # 无分页模板
+    selectors:                         # 通用选择器
+      item: "tr"                       # 标准列表使用表格行
+      title: "a"                       # 标题链接
+      link: "a"                        # 链接本身
+      date: null                       # 该站列表页不显示日期，需进详情页解析
+    filters:                           # 过滤规则
+      include_keywords:                # 包含关键词
+        - 人工智能                       # 主题词
+        - 生成式                        # 生成式专项
+        - 算法                          # 算法专项
+      exclude_keywords: []             # 不排除
+    notes: 国家标准本身不产生法律义务，但被监管文件引用后即具实际约束力；待启用  # 备注：
+
+  # ----------------------------------------------------------
+  # 行业自律规则 —— 第三梯队，暂未启用
+  # ----------------------------------------------------------
+  - id: sac-self-regulation            # 源标识
+    issuer_code: sac                   # 关联机构
+    name: 中证协-自律规则                # 栏目名称
+    tier: primary                      # 官方渠道
+    enabled: false                     # 【暂未启用】
+    fetcher: html_list                 # 通用抓取器
+    list_url: "https://www.sac.net.cn/flfg/zlgz/"  # 自律规则栏目
+    schedule: "0 6 * * 1"              # 每周一次
+    min_interval_seconds: 5            # 请求间隔
+    pagination:                        # 分页配置
+      enabled: false                   # 暂不翻页
+      max_pages: 1                     # 仅首页
+      url_pattern: null                # 无分页模板
+    selectors:                         # 通用选择器
+      item: "li"                       # 列表项
+      title: "a"                       # 标题链接
+      link: "a"                        # 链接本身
+      date: null                       # 列表页无日期
+    filters:                           # 过滤规则
+      include_keywords:                # 包含关键词
+        - 信息技术                       # 信息技术专项
+        - 数据                          # 数据治理
+        - 智能                          # 智能应用
+      exclude_keywords: []             # 不排除
+    notes: 待启用。行业自律规则法律约束力弱于部门规章，但对会员有实际约束  # 备注：
+
+  # ----------------------------------------------------------
+  # 地方层面 —— 第三梯队，暂未启用
+  # ----------------------------------------------------------
+  - id: shanghai-ai-policy             # 源标识
+    issuer_code: shanghai              # 关联机构
+    name: 上海市-人工智能政策            # 栏目名称
+    tier: primary                      # 官方渠道
+    enabled: false                     # 【暂未启用】
+    fetcher: html_list                 # 通用抓取器
+    list_url: "https://www.shanghai.gov.cn/nw12344/index.html"  # 政策文件栏目
+    schedule: "0 6 * * 1"              # 每周一次
+    min_interval_seconds: 5            # 请求间隔
+    pagination:                        # 分页配置
+      enabled: false                   # 暂不翻页
+      max_pages: 1                     # 仅首页
+      url_pattern: null                # 无分页模板
+    selectors:                         # 通用选择器
+      item: "li"                       # 列表项
+      title: "a"                       # 标题链接
+      link: "a"                        # 链接本身
+      date: "span"                     # 日期
+    filters:                           # 过滤规则
+      include_keywords:                # 包含关键词
+        - 人工智能                       # 主题词
+        - 智能                          # 复合词
+        - 数据                          # 数据要素
+      exclude_keywords: []             # 不排除
+    notes: 待启用。上海是国际金融中心，本地机构需关注市级 AI 与金融科技政策；记录此类政策时 jurisdiction_detail 应填"上海市"  # 备注：
+
+  # ----------------------------------------------------------
+  # 人工录入源 —— 兜底通道
+  # ----------------------------------------------------------
+  - id: manual-entry                   # 源标识
+    issuer_code: state_council         # 关联机构（人工录入可来自任意机构）
+    name: 人工录入（无自动抓取）          # 源名称
+    tier: primary                      # 官方渠道
+    enabled: true                      # 启用（参与每日校验，但不做网络抓取）
+    fetcher: manual                    # 标识为人工录入，流水线不做网络请求
+    list_url: null                     # 无列表页
+    schedule: "0 6 * * *"              # 仍参与每日调度，用于触发数据校验
+    min_interval_seconds: 0            # 无网络请求，无需限速
+    pagination: null                   # 无分页概念
+    selectors: null                    # 不需要选择器
+    filters: null                      # 不做关键词过滤
+    notes: 用于登记无法自动抓取的来源（网站结构过于特殊、需登录、或仅在纸质渠道发布）；此类记录同样必须通过 schema 校验，且 source.tier 必须为 primary、必须提供可公开访问的官方 URL  # 备注：存在的意义是宁可用人工补上，也不要因为抓不到就漏掉重要政策

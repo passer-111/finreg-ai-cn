@@ -1,0 +1,201 @@
+# ============================================================
+# 项目构建与工具配置
+# 说明：本文件同时承担三个职责 —— 包元数据、依赖声明、工具配置。
+# 这是 Python 生态的现代惯例（PEP 517/518/621）。
+# ============================================================
+
+# 声明构建后端 —— setuptools 是兼容性最好的选择
+[build-system]
+# 指定使用的构建后端实现
+requires = ["setuptools>=68", "wheel"]
+# 后端入口点，setuptools 的标准写法
+build-backend = "setuptools.build_meta"
+
+# ============================================================
+# 项目元数据（PEP 621 标准格式）
+# ============================================================
+[project]
+# 包名，需与 PyPI 上已有包不冲突
+name = "finreg-ai-cn"
+# 版本号 —— 语义化版本：0.x 表示 API 尚不稳定，数据模型可能调整
+version = "0.1.0"
+# 一句话描述，会显示在 PyPI 搜索结果中
+description = "中国金融领域 AI 合规政策知识库 —— 机器可读、实时更新、带生效/失效与版本溯源"
+# 详细说明文件的引用，避免长文本内联进配置
+readme = "README.md"
+# 要求 Python 3.10+ —— 因为代码中使用了 match 语句与 X | Y 联合类型标注
+requires-python = ">=3.10"
+# 许可证采用 SPDX 标识符，机器可读
+license = { text = "MIT" }
+# 关键词，便于在仓库与包索引中被检索到
+keywords = [
+    "compliance",       # 合规
+    "regtech",          # 监管科技
+    "ai-governance",    # AI 治理
+    "financial-regulation", # 金融监管
+    "china",            # 中国法域
+    "knowledge-base",   # 知识库
+]
+# 分类器 —— 帮助 PyPI 与工具正确归类本项目
+classifiers = [
+    "Development Status :: 3 - Alpha",       # 早期开发阶段，API 可能变动
+    "Intended Audience :: Financial and Insurance Industry", # 目标用户是金融从业者
+    "Intended Audience :: Legal Industry",   # 同时也是法务与合规人员的工具
+    "License :: OSI Approved :: MIT License",# 代码许可证
+    "Natural Language :: Chinese (Simplified)", # 内容主体为简体中文
+    "Programming Language :: Python :: 3.10",   # 支持的最低版本
+    "Programming Language :: Python :: 3.11",   # 已测试版本
+    "Programming Language :: Python :: 3.12",   # 已测试版本
+    "Programming Language :: Python :: 3.13",   # 已测试版本
+    "Topic :: Office/Business :: Financial",     # 主题归类：金融
+    "Topic :: Text Processing :: Markup :: HTML",# 主题归类：HTML 解析
+]
+
+# 运行时依赖 —— 与 requirements.txt 保持一致，此处是权威来源
+dependencies = [
+    "requests>=2.32.0",        # HTTP 抓取
+    "beautifulsoup4>=4.12.0",  # HTML 容错解析
+    "lxml>=5.3.0",             # 高速解析后端
+    "PyYAML>=6.0.2",           # YAML 读写（支持注释）
+    "jsonschema>=4.23.0",      # 记录结构校验
+    "python-dateutil>=2.9.0",  # 混乱日期格式解析
+]
+
+# 可选依赖组 —— 用户按需安装，避免强迫安装开发工具
+[project.optional-dependencies]
+# 开发依赖组，通过 pip install -e ".[dev]" 安装
+dev = [
+    "pytest>=8.3.0",        # 测试框架
+    "pytest-cov>=6.0.0",    # 覆盖率
+    "ruff>=0.8.0",          # 代码检查
+    "mypy>=1.14.0",         # 类型检查
+    "types-requests",       # requests 类型存根
+    "types-PyYAML",         # PyYAML 类型存根
+]
+
+# ============================================================
+# 命令行入口点 —— 安装后可直接使用 finreg 命令
+# ============================================================
+[project.scripts]
+# 命令名 = 模块路径:函数名
+finreg = "finreg_ai.cli:main"
+
+# ============================================================
+# setuptools 打包配置 —— 使用 src 布局，强制测试时导入已安装的包
+# ============================================================
+[tool.setuptools.packages.find]
+# 告诉 setuptools 到 src 目录下查找包，而非项目根目录
+where = ["src"]
+# 只打包 finreg_ai 开头的包，排除测试目录
+include = ["finreg_ai*"]
+
+# ============================================================
+# ruff 代码检查配置
+# ============================================================
+[tool.ruff]
+# 单行最大长度，与 .editorconfig 保持一致
+line-length = 120
+# 目标 Python 版本，ruff 据此判断可用的语法特性
+target-version = "py310"
+# 排除目录，避免检查生成物与数据目录
+exclude = [
+    ".git",           # 版本控制目录
+    ".venv",          # 虚拟环境
+    "data",           # 数据目录，YAML 不受 ruff 管辖
+]
+
+[tool.ruff.lint]
+# 启用的规则集：E/W 语法与风格、F 逻辑错误、I 导入排序、UP 语法升级、B 常见陷阱
+select = ["E", "W", "F", "I", "UP", "B"]
+# 忽略的规则
+ignore = [
+    # E501（行过长）—— 由注释充分表达意图时，长行比强行折行更易读
+    "E501",
+    # I001（导入未排序）—— 【本项目刻意关闭】
+    # 本项目有一条硬性要求：**每一行代码都要有注释，包括 import**。
+    # 而「在 import 上方写一行注释」的写法会让每个导入自成一个分组，
+    # 与 isort 要求的「按标准库/第三方/本地库连续分组」直接冲突。
+    # 二者只能取其一，本项目的选择是注释优先：
+    # 一个新人打开文件时，能看懂「这行为什么要导入」比「导入是否按字母序排列」
+    # 重要得多。注意其余规则仍然强制，尤其 F401（未使用导入）不受影响——
+    # 也就是说，关掉的只是排序，不是导入的整洁性。
+    "I001",
+]
+
+# ============================================================
+# mypy 静态类型检查配置
+# ============================================================
+[tool.mypy]
+# 指定 Python 版本，避免 mypy 使用当前解释器版本导致误报
+python_version = "3.10"
+# 开启严格模式 —— 数据模型字段多，严格检查能显著降低运行期错误
+strict = true
+# 对无类型标注的第三方库放行，避免因生态问题阻塞
+ignore_missing_imports = true
+
+# 【检查范围只含 src，不含 tests】——这是一个经过实测的决定，请勿顺手改宽。
+#
+# 直接运行 `mypy src tests`（或 `mypy .`）会立刻失败，报错为：
+#   tests\conftest.py: error: Source file found twice under different module names:
+#   "conftest" and "tests.conftest"
+# 原因是本项目采用 src 布局且 tests 下没有 __init__.py，
+# mypy 无法同时满足两种模块命名假设。
+#
+# 官方给出的三种解法都不适合本项目：
+#   1) 给 tests 加 __init__.py —— 会改变 pytest 的测试收集方式，得不偿失
+#   2) --explicit-package-bases —— 加上之后 mypy 会一路走进 site-packages
+#      里 numpy 的 .pyi，在本项目声明的 python_version=3.10 下报出
+#      「Type statement is only supported in Python 3.12 and greater」，
+#      这条错误来自第三方存根，与我们无关却会永久标红
+#   3) 调 MYPYPATH —— 治标不治本，且引入隐式约定
+#
+# 因此范围定为 src：**发布出去、会被别人 import 的代码有严格类型保证**；
+# tests 则由「真的把它跑起来」（pytest）加 ruff 两层覆盖。
+# 一个永远红的检查比没有检查更糟——它会让所有人习惯性地忽略红色。
+
+# ============================================================
+# pytest 配置
+# ============================================================
+[tool.pytest.ini_options]
+# 测试文件搜索路径
+testpaths = ["tests"]
+# 默认命令行参数：-v 详细输出，--strict-markers 禁止未注册的 marker（防止拼写错误静默通过）
+addopts = "-v --strict-markers"
+# 注册自定义 marker，便于按类型筛选测试（如只跑解析器测试）
+markers = [
+    "network: 需要真实外网访问的测试，默认在 CI 中跳过",  # 因部分政府网站不可达
+    "slow: 耗时较长的测试",                              # 便于快速迭代时跳过
+]
+# 过滤警告：把未处理的弃用警告视为错误，迫使我们及时跟进依赖变更。
+#
+# 注意这里有一条豁免，原因是实测踩到过：Python 3.13 的标准库 HTMLParser
+# 会发出「The 'strip_cdata' option of HTMLParser() has never done anything」
+# 弃用警告，而 BeautifulSoup / lxml 在内部会用它。这条警告不在本项目
+# 可控范围内，但若不放行，它会在解析 HTML 时被提升为异常，
+# 导致所有 HTML 类数据源在测试中集体报 failed——
+# 看起来像抓取器坏了，实际只是别人库的一条提醒。
+# 处理原则：只对我们**自己的代码**产生的弃用警告严格，
+# 对第三方库内部实现产生的、我们无法通过升级自己代码来消除的警告放行。
+filterwarnings = [
+    "error::DeprecationWarning",                              # 自有代码不得产生弃用警告
+    "ignore:The 'strip_cdata' option.*:DeprecationWarning",   # 已知的第三方库内部警告
+]
+
+# ============================================================
+# 覆盖率配置
+# ============================================================
+[tool.coverage.run]
+# 统计分支覆盖，而不只是行覆盖 —— 解析器的分支逻辑才是重点
+branch = true
+# 统计范围限定在包目录内
+source = ["src/finreg_ai"]
+
+[tool.coverage.report]
+# 覆盖率报告不显示完全未执行的代码行内容，只提示行号，保持输出简洁
+show_missing = true
+# 排除无法被测试覆盖的代码模式
+exclude_lines = [
+    "pragma: no cover",        # 显式标注豁免
+    "if TYPE_CHECKING:",       # 仅在类型检查时执行的导入块
+    "raise NotImplementedError", # 抽象基类的占位实现
+]
