@@ -1,0 +1,70 @@
+{
+  "detected_on": "2026-10-05",
+  "generated_at": "2026-10-05T10:54:21+08:00",
+  "policies_scanned": 9,
+  "change_count": 6,
+  "high_significance_count": 0,
+  "failed_sources": [],
+  "changes": [
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1273452",
+      "title": "金融监管总局 科技部等部门联合召开科技保险交流推进会 多方协同支持科技创新",
+      "detected_on": "2026-10-05",
+      "significance": "medium",
+      "detail": "发现新条目待录入：金融监管总局 科技部等部门联合召开科技保险交流推进会 多方协同支持科技创新（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1273452",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1261708",
+      "title": "国家金融监督管理总局发布《关于银行业保险业人工智能安全开发应用的指导意见》",
+      "detected_on": "2026-10-05",
+      "significance": "medium",
+      "detail": "发现新条目待录入：国家金融监督管理总局发布《关于银行业保险业人工智能安全开发应用的指导意见》（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1261708",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1261710",
+      "title": "国家金融监督管理总局有关司局负责人就《关于银行业保险业人工智能安全开发应用的指导意见》答记者问",
+      "detected_on": "2026-10-05",
+      "significance": "medium",
+      "detail": "发现新条目待录入：国家金融监督管理总局有关司局负责人就《关于银行业保险业人工智能安全开发应用的指导意见》答记者问（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1261710",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1250616",
+      "title": "科技部、金融监管总局、工业和信息化部、国家知识产权局《关于加快推动科技保险高质量发展 有力支撑高水平科技自立自强的若干意见》政策问答",
+      "detected_on": "2026-10-05",
+      "significance": "medium",
+      "detail": "发现新条目待录入：科技部、金融监管总局、工业和信息化部、国家知识产权局《关于加快推动科技保险高质量发展 有力支撑高水平科技自立自强的若干意见》政策问答（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1250616",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1250615",
+      "title": "科技部、金融监管总局、工业和信息化部、国家知识产权局联合发布《关于加快推动科技保险高质量发展 有力支撑高水平科技自立自强的若干意见》",
+      "detected_on": "2026-10-05",
+      "significance": "medium",
+      "detail": "发现新条目待录入：科技部、金融监管总局、工业和信息化部、国家知识产权局联合发布《关于加快推动科技保险高质量发展 有力支撑高水平科技自立自强的若干意见》（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1250615",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:csrc-regulations:https://www.csrc.gov.cn/csrc/c101838/c1021955/content.shtml",
+      "title": "【第152号令】《证券基金经营机构信息技术管理办法》",
+      "detected_on": "2026-10-05",
+      "significance": "medium",
+      "detail": "发现新条目待录入：【第152号令】《证券基金经营机构信息技术管理办法》（来源：csrc-regulations）",
+      "url": "https://www.csrc.gov.cn/csrc/c101838/c1021955/content.shtml",
+      "fields": []
+    }
+  ]
+}
