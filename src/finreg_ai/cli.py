@@ -468,6 +468,25 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             # 输出统计
             print(f"变更条数：{len(report.change_set.changes)}  {counts if counts else ''}")
 
+        # 打印变更文件的写入结果。合并这件事必须可见——
+        # 若某次运行往文件里多带了「不是本次抓到的」条目而没人说，
+        # 使用者会把它们当成今天的发现。
+        if report.change_write:
+            # 取出写入结果
+            outcome = report.change_write
+            # 打印落盘位置与合并情况
+            print(f"变更文件：{outcome.path.name}  共 {outcome.total} 条"
+                  f"（本次新增 {outcome.added}、覆盖 {outcome.replaced}）")
+            # 保留了旧条目时单独说一句，否则「总数大于本次产出」无法解释
+            if outcome.kept_from_previous:
+                # 说明保留数及原因
+                print(f"          保留文件中已有的 {outcome.kept_from_previous} 条"
+                      f"（本次未产出，通常是未参与本次运行的源）")
+            # 旧文件读不了时明确报出，避免损坏被下一次覆盖悄悄抹掉
+            if outcome.previous_unreadable:
+                # 打印警告
+                print(f"          警告：既有变更文件无法合并，已整份重写 —— {outcome.previous_unreadable}")
+
         # 打印失败源——这一项必须显著，否则「无变更」会被误读为「一切正常」
         if report.failed_sources:
             # 打印警告
