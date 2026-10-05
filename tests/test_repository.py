@@ -58,13 +58,19 @@ def test_sources_registry_has_expected_scale() -> None:
 
     数字写死是刻意的：它会让「不小心删掉一个机构定义」变成一次测试失败，
     而不是一个静默的数据缺口。
+
+    2026-10-05 变更：数据源由 10 增至 12。原因是网信办源被拆分——
+    早期把网信办记为一个源且判断其不可达，复核后发现「不可达」实为 URL 失效，
+    且网信办把不同类型的文件分列在不同栏目下（部门规章 / 规范性文件 / 政策文件），
+    三栏目内容互补（分别命中 AI 专项规章、金融交叉规范、国家级 AI 产业政策），
+    因此拆为三个独立源。这不是简单加数量，而是修正了一个覆盖盲区。
     """
     # 加载登记表
     issuers, sources, _errors = load_sources()
     # 当前登记了 14 个机构
     assert len(issuers) == 14
-    # 当前登记了 10 个数据源
-    assert len(sources) == 10
+    # 当前登记了 12 个数据源（网信办按栏目拆为 3 个）
+    assert len(sources) == 12
 
 
 def test_every_source_fetcher_is_registered() -> None:

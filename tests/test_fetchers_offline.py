@@ -16,6 +16,7 @@
 import json
 
 # 导入待测抓取器与工具
+from finreg_ai.fetchers.cac import CacFetcher
 from finreg_ai.fetchers.csrc import CsrcFetcher, extract_meta
 from finreg_ai.fetchers.html_list import HtmlListFetcher
 from finreg_ai.fetchers.json_search_list import JsonSearchListFetcher
@@ -499,3 +500,170 @@ def test_fetch_reports_degraded_when_all_docs_are_navigation() -> None:
     assert result.status == "degraded"
     # 剔除数量应被记录
     assert result.dropped_navigation == 2
+
+
+# ============================================================
+# 网信办抓取器 —— 以 2026-10 改版后的新页面结构为样本
+# ============================================================
+#
+# 为什么这一组测试特别重要
+# ------------------------
+# 网信办源曾被误判为「网络不可达」而被禁用近一个月，实际原因只是 URL 失效
+# （旧地址返回 404，而非超时）。恢复该源时页面结构已经改版，旧选择器
+# （item="li"、date="span"）在新页面上会以两种方式静默失败：
+#   1. item="li" 会把 13 条站点导航当成政策条目一并收进来
+#   2. date="span" 在新页面匹配不到任何元素（该页没有 span），
+#      日期全部丢失后，drop_probable_navigation 会把所有条目误判为导航而清空
+# 二者都不会抛异常，只会让流水线报 ok 却拿到垃圾或空结果——正是本项目最警惕的
+# 「静默污染」。下面三条测试分别锁死这两个陷阱以及真实的解析结果。
+
+# 网信办「部门规章」栏目地址，与 data/sources.yaml 中 cac-department-rules 一致
+CAC_DEPT_LIST_URL = "https://www.cac.gov.cn/wxzw/zcfg/bmgz/A09370303index_1.htm"
+
+# 网信办列表页的选择器，与真实配置一致
+CAC_SELECTORS = {
+    # 定位到内容容器 #loadingInfoPage 内的 li。
+    # 不用裸 "li"：该页 38 个 li 中有 13 个是站点导航，会被误收为政策条目。
+    # 也不用 "li:has(div.times)"：那会让「日期解析失败」的政策被选择器直接排除，
+    # 连进入清洗与台账的机会都没有——见 test_cac_fetcher_keeps_undated_items_that_are_not_navigation。
+    "item": "#loadingInfoPage li",
+    "title": "h5 a",               # 标题在 h5 内的链接上
+    "link": "h5 a",                # 链接即标题链接
+    "date": "div.times",           # 日期在 div.times，不是 span（该页没有任何 span）
+}
+
+
+def make_cac_source(**overrides: object):
+    """构造使用 cac 抓取器的网信办数据源，默认选择器照搬真实配置。"""
+    # 基线配置与 data/sources.yaml 中 cac-department-rules 保持一致
+    defaults: dict = {
+        "fetcher": "cac",                                   # 使用网信办专用抓取器
+        "list_url": CAC_DEPT_LIST_URL,                      # 部门规章栏目地址
+        "selectors": dict(CAC_SELECTORS),                   # 复制一份，避免测试间互相污染
+    }
+    # 应用覆盖项
+    defaults.update(overrides)
+    # 交给共享装置构造
+    return make_source(**defaults)
+
+
+def _cac_router(url: str) -> FakeResponse:
+    """把网信办列表页地址路由到本地固定装置。"""
+    # 忽略具体 URL，一律返回部门规章栏目页的固定装置
+    return FakeResponse(text=load_fixture_text("cac_bmgz_list.html"))
+
+
+def test_cac_fetcher_parses_all_content_items_offline() -> None:
+    """验证网信办列表页能被完整解析，且条目数与页面内容条目数一致。
+
+    固定装置是 2026-10-05 从 https://www.cac.gov.cn/wxzw/zcfg/bmgz/A09370303index_1.htm
+    原样保存的真实页面，其中含 <div class="times"> 的内容条目恰为 20 条。
+    若解析结果少于此数，说明选择器把有效内容也排除掉了（漏检）。
+    """
+    # 构造数据源
+    source = make_cac_source()
+    # 执行抓取（固定装置路由，不触网）
+    result = CacFetcher(source, session=FakeSession(_cac_router)).fetch()
+
+    # 抓取应成功
+    assert result.status == "ok"
+    # 应解析出全部 20 条内容条目
+    assert len(result.docs) == 20
+    # 只应发出一次请求（该栏目已确认无分页）
+    assert result.request_count == 1
+
+
+def test_cac_fetcher_excludes_site_navigation() -> None:
+    """验证网信办页面上的站点导航链接被排除，不会污染政策库。
+
+    该页面共有 38 个 <li>，其中 13 个是站点导航（首页、时政要闻、网信政务、
+    互动服务、热点专题，以及法律/行政法规/部门规章/司法解释/规范性文件/
+    政策文件/政策解读七个子栏目入口）。这些导航标题很短、且部分含「法规」
+    「政策」等字样，若用裸 "li" 选择器会被当成政策条目收录。
+
+    这里断言「导航标题不出现在结果中」，是防守式断言：
+    即使将来页面内容条目数变化，这条断言仍然有效。
+    """
+    # 构造数据源
+    source = make_cac_source()
+    # 执行抓取
+    result = CacFetcher(source, session=FakeSession(_cac_router)).fetch()
+
+    # 收集结果中的所有标题
+    titles = {doc.title for doc in result.docs}
+    # 这些标题全部是站点导航，绝不应出现在政策结果里
+    for navigation_title in ("首 页", "时政要闻", "网信政务", "互动服务", "热点专题", "行政法规", "司法解释"):
+        # 逐条断言不存在
+        assert navigation_title not in titles, f"导航项「{navigation_title}」被误当作政策条目收录"
+
+
+def test_cac_fetcher_extracts_dates_from_times_div() -> None:
+    """验证日期从 div.times 正确提取，而不是全部丢失。
+
+    这是本组测试的核心防线。旧的 date="span" 选择器在这个页面上匹配不到
+    任何元素，会导致所有条目的 published_on 为 None；而 published_on 为 None
+    正是 drop_probable_navigation 判定「疑似导航」的第一个条件。
+    于是「日期选择器写错」这一处配置失误，会沿着
+    「日期丢失 → 全被判为导航 → 结果清空」的链条放大为完全静默的失败。
+
+    断言「超过一半条目有日期」而不是「全部有日期」，是因为：
+    保留一点容错空间，避免个别条目日期格式异常时测试变得脆弱；
+    但如果大面积丢日期，这条断言会立刻失败。
+    """
+    # 构造数据源
+    source = make_cac_source()
+    # 执行抓取
+    result = CacFetcher(source, session=FakeSession(_cac_router)).fetch()
+
+    # 统计有日期的条目数
+    dated = [doc for doc in result.docs if doc.published_on is not None]
+    # 绝大多数条目应带日期
+    assert len(dated) > len(result.docs) / 2, "日期大面积丢失，检查 date 选择器是否与页面结构匹配"
+    # 抽验一条已知条目：深度合成规定发布于 2022-12-11
+    deepfake = [doc for doc in result.docs if "深度合成" in doc.title]
+    # 该条应存在
+    assert deepfake, "未解析出《互联网信息服务深度合成管理规定》"
+    # 其日期应被正确解析
+    assert deepfake[0].published_on is not None
+    # 年份应为 2022
+    assert deepfake[0].published_on.year == 2022
+
+
+def test_cac_fetcher_keeps_undated_items_that_are_not_navigation() -> None:
+    """验证「无日期但标题够长」的条目不会被误判为导航而丢弃。
+
+    这是对 drop_probable_navigation 三条件判定的反向测试。
+    导航链接的判定要求三个条件同时成立：无日期 + 链接不更深 + 标题短。
+    本测试构造一条「无日期、但标题很长」的条目——
+    它在真实页面上对应的是某个日期解析失败的正式政策。
+
+    若该条目被丢弃，说明判定逻辑退化成「只看有无日期」，
+    那会把所有日期解析失败的正式政策一并误杀，属于不可逆的数据损失。
+    """
+    # 构造一个只有两条内容的极简页面：一条有日期、一条无日期但标题很长
+    html = (
+        '<html><body><ul id="loadingInfoPage">'
+        # 正常条目：含日期
+        '<li><h5><a href=//www.cac.gov.cn/2026-04/10/c_x.htm target=_blank title="人工智能拟人化互动服务管理暂行办法">'
+        '人工智能拟人化互动服务管理暂行办法</a></h5><div class="times">2026-04-10</div></li>'
+        # 异常条目：没有 div.times（日期解析失败），但标题是完整的长句
+        '<li><h5><a href=//www.cac.gov.cn/2026-03/01/c_y.htm target=_blank title="关于进一步加强生成式人工智能服务备案管理的若干意见">'
+        '关于进一步加强生成式人工智能服务备案管理的若干意见</a></h5></li>'
+        '</ul></body></html>'
+    )
+
+    # 路由恒定返回上述页面
+    def router(_url: str) -> FakeResponse:
+        """返回构造的极简页面。"""
+        # 返回 HTML
+        return FakeResponse(text=html)
+
+    # 构造数据源
+    source = make_cac_source()
+    # 执行抓取
+    result = CacFetcher(source, session=FakeSession(router)).fetch()
+
+    # 两条都应保留：无日期不是丢弃的充分条件
+    assert len(result.docs) == 2
+    # 其中一条应有日期
+    assert sum(1 for d in result.docs if d.published_on is not None) == 1
