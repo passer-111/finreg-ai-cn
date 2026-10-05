@@ -39,8 +39,8 @@ topics:                                          # 主题标签
 
 # ---- 时效性 ----
 status: effective                                # 当前状态：现行有效
-published_on: 2026-07-01                         # 公布日期：仅精确到月份，此处填当月首日
-effective_from: null                             # 【刻意留空】仅知 2026 年 7 月施行，未确认具体日期
+published_on: 2026-04-10                         # 公布日期（依据：网信办页面标注 2026年04月10日18:13；2026-10-05 修正，此前按月份精度误填 2026-07-01）
+effective_from: 2026-07-15                       # 生效日期（依据：本办法第三十二条「本办法自2026年7月15日起施行」，2026-10-05 核验官方全文）
 effective_until: null                            # 无固定失效期限
 supersedes: []                                   # 未取代先前文件
 superseded_by: null                              # 未被取代
@@ -50,18 +50,18 @@ amended_by: []                                           # 未被修订
 # ---- 版本链 ----
 versions:
   - version: 1                                   # 首版
-    published_on: 2026-07-01                     # 公布日期（月份精度，填当月首日）
-    effective_from: null                         # 施行日期待核验
+    published_on: 2026-04-10                     # 公布日期（已核验）
+    effective_from: 2026-07-15                   # 生效日期（原文依据：第三十二条）
     effective_until: null                        # 尚未失效
     status: effective                            # 现行有效
-    url: https://www.cac.gov.cn/                 # 网信办官网（详情页链接待补齐）
+    url: https://www.cac.gov.cn/2026-04/10/c_1777558395078289.htm  # 官方原文链接（2026-10-05 补齐）
     archived_url: null                           # 无需存档
     content_hash: null                           # 未计算摘要
     change_note: null                            # 首版
 
 # ---- 来源溯源 ----
 source:
-  url: https://www.cac.gov.cn/                   # 网信办官网（详情页链接待补）
+  url: https://www.cac.gov.cn/2026-04/10/c_1777558395078289.htm  # 官方原文链接（2026-10-05 补齐）
   site: cac.gov.cn                               # 来源站点
   tier: primary                                  # 官方原始渠道
   fetched_at: 2026-10-03T12:00:00+08:00          # 整理时间
@@ -70,9 +70,9 @@ source:
   snapshot_path: null                            # 未保存快照
 
 # ---- 核验台账 ----
-last_verified: 2026-10-03                        # 最近核验日期
+last_verified: 2026-10-05                                                # 最近核验日期
 verified_by: automated                           # 检索整理，尚未人工核对
-verified_note: 【需人工补充】公开报道仅有「2026 年 7 月施行」的月份级信息，未获得具体施行日期与官方详情页 URL。published_on 与版本 published_on 均按月份精度填写当月首日（2026-07-01），此值不代表真实公布日期，人工核验时应予替换。effective_from 留空以避免制造虚假精度。
+verified_note: 2026-10-05 已找到官方原文并完成核验（详情页 URL 已补齐）。此前记录仅有「2026 年 7 月施行」的月份级信息，故 published_on 按当月首日填写、effective_from 刻意留空。现已确认：页面标注发布日 2026-04-10，第三十二条载明「本办法自2026年7月15日起施行」，两个日期均有原文依据，故一并填入具体日期。
 
 # ---- 适用主体 ----
 applicable_to:                                   # 原文明确的适用主体

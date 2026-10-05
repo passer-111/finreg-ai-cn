@@ -40,7 +40,7 @@ topics:                                          # 主题标签
 # ---- 时效性 ----
 status: effective                                # 当前状态：现行有效
 published_on: 2023-07-13                         # 公布日期
-effective_from: 2023-08-15                       # 生效日期
+effective_from: 2023-08-15                       # 生效日期（依据：本办法第二十四条「本办法自2023年8月15日起施行」，2026-10-05 核验官方全文）
 effective_until: null                            # 无固定失效期限
 supersedes: []                                   # 未取代先前文件
 superseded_by: null                              # 未被取代
@@ -51,7 +51,7 @@ amended_by: []                                   # 未被修订
 versions:
   - version: 1                                   # 首版
     published_on: 2023-07-13                     # 公布日期
-    effective_from: 2023-08-15                   # 生效日期
+    effective_from: 2023-08-15                   # 生效日期（原文依据：第二十四条）
     effective_until: null                        # 尚未失效
     status: effective                            # 现行有效
     url: https://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm  # 官方原文链接
@@ -72,7 +72,7 @@ source:
 # ---- 核验台账 ----
 last_verified: 2026-10-03                        # 最近核验日期
 verified_by: automated                           # 检索整理，尚未人工核对
-verified_note: 公布日期 2023-07-13、施行日期 2023-08-15 为广为引用的通行表述，仍需人工打开官方页面确认详情页 URL 与日期条款。
+verified_note: 2026-10-05 已核验网信办公开发布的官方全文：第二十四条载明「本办法自2023年8月15日起施行」，且公布文本开头亦声明「现予公布，自2023年8月15日起施行」。生效日期有原文明确依据，非推断。
 
 # ---- 适用主体 ----
 applicable_to:                                   # 原文明确的适用主体

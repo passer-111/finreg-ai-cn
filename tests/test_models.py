@@ -26,6 +26,7 @@ from finreg_ai.models import (
     SourceTier,
     VerifiedBy,
     Version,
+    admits_effective_date_unconfirmed,
     is_warning,
     policy_from_dict,
     policy_to_dict,
@@ -311,6 +312,125 @@ def test_validate_semantics_emits_warning_for_auto_verified() -> None:
     problems = make_policy(verified_by=VerifiedBy.AUTOMATED).validate_semantics()
     # 应产出警告级问题
     assert any(is_warning(p) and "尚未经人工核验" in p for p in problems)
+
+
+# ============================================================
+# 规则 11 / 12：填了生效日期就必须说得清依据
+# ============================================================
+#
+# 这两条规则的由来：项目 README 一直写着「施行日期无法从原文确认时，
+# effective_from 应当留空并在 verified_note 说明原因」，但没有任何机制执行它。
+# 结果实测 9 条记录里有 3 条违反了它——字段填了具体日期，
+# 核验说明却承认该日期未确认。下面第一个测试用的就是当初真正漏过去的原文。
+
+# nfra-2026-ai-guidance 在 2026-10-05 修正前使用的核验说明原文（逐字复制）
+_NFRA_OLD_VERIFIED_NOTE = (
+    "初始种子数据。政策存在与发布日期已通过金融监管总局官网及多家媒体报道交叉确认；"
+    "但 effective_from 未在公开摘录中明确写出施行日期条款，需人工打开原文确认是否为「自发布之日起施行」。"
+)
+
+
+def test_validate_semantics_flags_effective_date_contradiction() -> None:
+    """验证「填了生效日期却承认该日期未确认」被判为错误。
+
+    这是本规则存在的原因：这类记录同时主张「施行日期是 X」与「不知道是不是 X」，
+    比单纯缺日期危险得多——缺日期是显式的空白，使用者会去问；
+    自相矛盾却会让下游直接把那个未经确认的日期当事实使用。
+
+    特别注意断言的是**非警告**（即错误），因为警告不足以阻止它入库。
+    """
+    # 用当初真实漏过去的那段说明
+    problems = make_policy(verified_note=_NFRA_OLD_VERIFIED_NOTE).validate_semantics()
+    # 应产出错误级问题（不带警告前缀）
+    assert any((not is_warning(p)) and "自相矛盾" in p for p in problems)
+
+
+def test_validate_semantics_accepts_effective_date_with_stated_basis() -> None:
+    """反向测试：给出了原文依据的记录不应被判为矛盾。
+
+    若这条测试失败，说明规则退化成「见到任何不确定字眼就报错」，
+    那会逼着贡献者删掉说明文字，反而降低数据质量。
+    """
+    # 说明中明确交代了依据条款
+    note = "已核验官方全文，第二十四条载明「本办法自2026年7月1日起施行」，公布文本开头亦作同样声明。"
+    # 执行校验
+    problems = make_policy(verified_note=note).validate_semantics()
+    # 不应出现矛盾告警
+    assert not any("自相矛盾" in p for p in problems)
+
+
+def test_validate_semantics_ignores_uncertainty_about_unrelated_topic() -> None:
+    """反向测试：不确定表述与该记录的其他事项有关时，不应误判为日期矛盾。
+
+    真实场景：一条记录的说明常常既讲生效日期，又讲配套细则。
+    若「尚未明确」出现在讲细则的那一句里，不能算作对生效日期的承认。
+    这条测试守住「按句绑定」这一设计，防止实现被简化成全文关键词匹配。
+    """
+    # 前半句讲日期（已确认），后半句讲细则（未明确）
+    note = "生效日期已核验官方全文，第二十四条载明自2026年7月1日起施行；另有配套实施细则尚未明确。"
+    # 执行校验
+    problems = make_policy(verified_note=note).validate_semantics()
+    # 不应误报
+    assert not any("自相矛盾" in p for p in problems)
+
+
+def test_validate_semantics_requires_basis_from_automated_record() -> None:
+    """验证自动核验记录填了生效日期却未交代出处时，产出警告。
+
+    为什么只对 automated 记录提这条要求：自动化整理的产出逻辑是
+    「生成一条完整记录」，天然倾向于把字段填满，因此需要额外约束。
+    """
+    # 自动核验、填了日期、无任何核验说明
+    problems = make_policy(verified_by=VerifiedBy.AUTOMATED, verified_note=None).validate_semantics()
+    # 应产出警告级问题
+    assert any(is_warning(p) and "未说明该日期的出处" in p for p in problems)
+
+
+def test_validate_semantics_does_not_demand_basis_from_human_record() -> None:
+    """反向测试：人工核验的记录不因缺少日期出处而被警告。
+
+    核验行为本身就是依据。若对人工记录也逐条要求说明，
+    只会制造大量无意义告警，最终让人习惯性忽略告警——那比没有告警更糟。
+    """
+    # 人工核验、填了日期、无说明
+    problems = make_policy(verified_by=VerifiedBy.HUMAN, verified_note=None).validate_semantics()
+    # 不应出现「未说明出处」的告警
+    assert not any("未说明该日期的出处" in p for p in problems)
+
+
+@pytest.mark.parametrize(
+    "note,should_flag",
+    [
+        # 承认未确认的常见写法，都应命中
+        ("生效日期需人工核验官方原文", True),
+        ("施行日期尚未确认", True),
+        ("effective_from 未在公开摘录中明确写出施行日期条款", True),
+        ("生效日期未在原文中载明，暂按落款日期填写", True),
+        ("生效日期无法确认", True),
+        # 已交代依据的写法，不应命中
+        ("生效日期依据第二十四条「自2026年7月1日起施行」", False),
+        ("已核验官方全文并确认施行日期", False),
+        # 谈的是别的事，不应命中
+        ("生效日期已核验；配套细则尚未明确", False),
+        ("条款数量已核对无误", False),
+    ],
+)
+def test_admits_effective_date_unconfirmed(note: str, should_flag: bool) -> None:
+    """逐例验证「是否承认生效日期未确认」的判定。
+
+    其中「未在公开摘录中明确写出」一例是真实缺陷的复现——
+    第一版实现只匹配连续词「未明确」，漏掉了这种插入状语的句式。
+    """
+    # 判定结果与预期一致
+    assert (admits_effective_date_unconfirmed(note) is not None) is should_flag
+
+
+def test_admits_effective_date_unconfirmed_returns_none_for_empty_note() -> None:
+    """验证空说明不产生误报。"""
+    # None 与空串都应返回 None
+    assert admits_effective_date_unconfirmed(None) is None
+    # 空字符串同理
+    assert admits_effective_date_unconfirmed("") is None
 
 
 # ============================================================

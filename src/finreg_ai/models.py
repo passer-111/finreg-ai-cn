@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 # 导入枚举基类，用于定义受控取值
 from enum import Enum
+# 导入正则，用于按句读切分核验说明（判断「同一句内」是否自相矛盾）
+import re
 # 导入任意类型标注，用于承载自由格式字段
 from typing import Any
 
@@ -234,6 +236,101 @@ def with_location(issue: str, location: str) -> str:
         return f"{WARNING_PREFIX} {location}: {strip_warning_prefix(issue)}"
     # 错误级问题：位置信息直接前置
     return f"{location}: {issue}"
+
+
+# ============================================================
+# 「生效日期是否真的已核验」的检测
+# ============================================================
+#
+# 为什么需要它
+# ------------
+# 本项目有一条明确规则：施行日期无法从原文确认时，``effective_from``
+# 应当留空并在 ``verified_note`` 中说明原因。
+#
+# 但早期实测发现，规则写了却没有机制执行，于是出现了最坏的一种数据：
+# **字段填了日期，核验说明却承认该日期未确认。** 记录同时说「是 2026-06-18」
+# 和「不知道是不是」，而下游只能看到那个日期，会把它当事实用。
+#
+# 这不是个例。实测 9 条记录中有 3 条犯此错，共同成因是：
+# 自动化整理（``verified_by: automated``）的产出逻辑是「生成一条完整记录」，
+# 而正确做法是「不确定就留空」。填满字段的倾向是结构性的，不会自己消失，
+# 因此必须由程序来强制。
+
+# 出现这些词，说明该句在谈论生效/施行日期
+_DATE_TOPIC_WORDS = (
+    "生效日",             # 生效日期
+    "施行日",             # 施行日期
+    "effective_from",    # 字段名本身，贡献者常在说明里直接引用
+    "生效时间",           # 同义表述
+    "施行时间",           # 同义表述
+)
+
+# 出现这些表述，说明该句承认了「不知道」
+_DATE_UNCERTAIN_WORDS = (
+    "需人工", "待核验", "待确认", "待核实", "待补充", "待定",
+    "未确认", "尚未确认", "未明确", "尚未明确", "未予明确", "不明确",
+    "无法确认", "难以确认", "不能确认", "需确认", "需核实", "尚未核验",
+    "未载明", "未查到", "未获", "有待核实", "存疑", "尚需", "未知",
+)
+
+# 中文里否定词与动词之间常插入状语，例如
+# 「未**在公开摘录中**明确写出施行日期条款」「尚未**经人工**确认」。
+# 单纯匹配「未明确」这样的连续词会漏掉它们——这一点在实测中真实漏过一次：
+# nfra-2026-ai-guidance 的核验说明用的正是这种句式，第一版检测逻辑没识别出来。
+# 因此补一条允许中间有间隔的正则，把「否定 + 若干字 + 认知动词」的形态一并覆盖。
+_DATE_NEGATION_GAP = re.compile(
+    r"(尚未|还未|仍未|未曾|未经|未|没有|无)[^，。；]{0,12}(载明|明确|确认|核验|核实|写明|注明|查证|取得|掌握)"
+)
+
+# 出现这些词，说明该说明交代了日期的出处，而不只是复述日期
+_DATE_BASIS_HINTS = (
+    "依据", "出处", "来源", "条款", "载明", "核验", "原文", "核对",
+    "确认", "明确", "施行", "生效", "第",
+)
+
+
+def _split_sentences(text: str | None) -> list[str]:
+    """按中文句读切分文本。
+
+    切分的目的是做「同一句内」的绑定判断：只有当「生效日期」这个话题
+    与「不确定」这种表态出现在同一句话里，才算自相矛盾。
+    """
+    # 以句号、分号、换行为界切分，并丢弃空白片段
+    return [s for s in re.split(r"[。；;\n]", text or "") if s.strip()]
+
+
+def admits_effective_date_unconfirmed(note: str | None) -> str | None:
+    """判断核验说明是否承认「生效日期尚未确认」；是则返回该句，否则返回 None。
+
+    为什么按句绑定，而不是见到「未确认」四个字就报警
+    ------------------------------------------------
+    简单关键词会大量误报。一条说明完全可能写
+    「已核验生效日期为 2023-08-15；另有实施细则尚未明确」——
+    句中的「尚未明确」与生效日期无关，不该触发告警。
+    要求话题词与不确定表述同句出现，可以滤掉绝大多数这类噪声。
+
+    局限（必须说清，不要高估它）
+    ----------------------------
+    这是**启发式护栏，不是证明**。它只能拦住「承认了却仍填值」这一种形态；
+    拦不住「悄悄编一个日期且全文不提任何不确定」——那种情况与诚实填写的记录
+    在字面上无法区分，只能靠人工核验原文，这也正是 ``last_verified`` 台账
+    和 ``verified_by`` 字段存在的理由。因此本函数的定位是**兜底网**：
+    它把最危险、最容易发生的一类矛盾变成可见的失败，而不是宣称日期都被验证过。
+    """
+    # 逐句检查
+    for sentence in _split_sentences(note):
+        # 先判断这一句是否在谈生效日期，无关的句子直接跳过
+        if not any(t in sentence for t in _DATE_TOPIC_WORDS):
+            # 与本函数无关，继续下一句
+            continue
+        # 再判断这一句是否承认了「不知道」，两种形态并列检查：
+        #   ① 连续的不确定表述（如「需人工核验」「尚未确认」）
+        #   ② 「否定词 + 状语 + 认知动词」（如「未在公开摘录中明确写出」）
+        if any(u in sentence for u in _DATE_UNCERTAIN_WORDS) or _DATE_NEGATION_GAP.search(sentence):
+            # 返回该句供报错信息引用，便于作者直接定位
+            return sentence.strip()
+    # 未发现矛盾
+    return None
 
 
 # ============================================================
@@ -575,6 +672,51 @@ class Policy:
         if self.source.tier != SourceTier.PRIMARY:
             # 本项目只允许官方原始来源进入记录
             problems.append(f"[{self.id}] source.tier={self.source.tier.value}，本项目只允许 primary 来源")
+
+        # 规则 11：生效日期与核验说明不得自相矛盾。
+        #
+        # 若 effective_from 填了值，而 verified_note 承认该日期尚未确认，
+        # 这条记录就同时主张了「施行日期是 X」与「不知道是不是 X」。
+        # 这比「缺日期」危险得多：缺日期是显式的空白，使用者会去问；
+        # 自相矛盾却会让下游把那个未经确认的日期直接当事实使用。
+        # 因此本条判为**错误**（阻断）而非警告——警告不足以阻止它入库。
+        #
+        # 实测背景：2026-10-05 复核 9 条记录，其中 3 条犯此错
+        # （nfra-2026-ai-guidance、pbc-2021-open-source-tech、
+        # cac-2023-genai-interim-measures）。规则一直写在 README 里，
+        # 但此前没有任何机制执行它。
+        #
+        # 处置方式二选一：①回原文核验后把依据写进 verified_note
+        # （此时说明中不再出现不确定表述）；②清空 effective_from 并说明原因。
+        contradiction = admits_effective_date_unconfirmed(self.verified_note)
+        if self.effective_from is not None and contradiction:
+            # 报错并引用原句，便于作者直接定位
+            problems.append(
+                f"[{self.id}] effective_from={self.effective_from} 已填写，"
+                f"但 verified_note 承认该日期尚未确认，自相矛盾："
+                f"「{contradiction[:80]}」"
+                f" —— 请二选一：核验原文后写明依据，或清空 effective_from 并说明原因"
+            )
+
+        # 规则 12：自动化整理填了生效日期时，必须交代该日期的出处。
+        #
+        # 为什么只对 automated 记录提这条要求：自动化整理的产出逻辑是
+        # 「生成一条完整记录」，天然倾向于把字段填满；而人工核验过的记录，
+        # 核验行为本身就是依据，再逐条要求说明只会制造无意义的噪声。
+        #
+        # 本条是警告而非错误：说明文字写得简略不应阻断入库，
+        # 但使用者有权知道这个日期有没有交代来源。
+        if (
+            self.verified_by == VerifiedBy.AUTOMATED
+            and self.effective_from is not None
+            and not any(hint in (self.verified_note or "") for hint in _DATE_BASIS_HINTS)
+        ):
+            # 提示补充日期依据
+            problems.append(
+                f"{WARNING_PREFIX} [{self.id}] verified_by=automated 且已填写 "
+                f"effective_from={self.effective_from}，但 verified_note 未说明该日期的出处"
+                f" —— 请写明原文条款或核验过程，或清空该字段"
+            )
 
         # 返回全部问题
         return problems
