@@ -133,25 +133,27 @@ strict = true
 # 对无类型标注的第三方库放行，避免因生态问题阻塞
 ignore_missing_imports = true
 
-# 【检查范围只含 src，不含 tests】——这是一个经过实测的决定，请勿顺手改宽。
+# 【检查范围只含 src，不含 tests】—— 请勿顺手改宽，除非先读完下面这段。
 #
-# 直接运行 `mypy src tests`（或 `mypy .`）会立刻失败，报错为：
+# 早期范围定为 src，是因为 `mypy src tests` 报：
 #   tests\conftest.py: error: Source file found twice under different module names:
 #   "conftest" and "tests.conftest"
-# 原因是本项目采用 src 布局且 tests 下没有 __init__.py，
-# mypy 无法同时满足两种模块命名假设。
 #
-# 官方给出的三种解法都不适合本项目：
-#   1) 给 tests 加 __init__.py —— 会改变 pytest 的测试收集方式，得不偿失
-#   2) --explicit-package-bases —— 加上之后 mypy 会一路走进 site-packages
-#      里 numpy 的 .pyi，在本项目声明的 python_version=3.10 下报出
-#      「Type statement is only supported in Python 3.12 and greater」，
-#      这条错误来自第三方存根，与我们无关却会永久标红
-#   3) 调 MYPYPATH —— 治标不治本，且引入隐式约定
+# **那个报错的根因已经修复**：真正的问题是 tests 缺少包标记，导致同一个
+# 文件有两个可能的模块名（详见 tests/__init__.py 的说明）。补上
+# tests/__init__.py 之后，该报错消失。
 #
-# 因此范围定为 src：**发布出去、会被别人 import 的代码有严格类型保证**；
-# tests 则由「真的把它跑起来」（pytest）加 ruff 两层覆盖。
-# 一个永远红的检查比没有检查更糟——它会让所有人习惯性地忽略红色。
+# 但范围**暂时仍保持 src**，因为扩到 tests 会撞上另一堵墙，且那堵墙与
+# 本项目无关：mypy 解析 tests 的导入链时会走进 site-packages，
+# 在 numpy 的 .pyi 里报
+#   numpy/__init__.pyi: error: Type statement is only supported in
+#   Python 3.12 and greater
+# 这条错误来自第三方存根，而本项目声明的 python_version 是 3.10。
+# 改 python_version 会波及 src 的检查尺度，为一个第三方存根放宽不值得。
+#
+# 结论：范围保持 src —— **发布出去、会被别人 import 的代码有严格类型保证**；
+# tests 由「真的把它跑起来」（pytest）+ ruff 两层覆盖。
+# 若将来想扩到 tests，先解决 numpy 存根那条，别直接改这一行。
 
 # ============================================================
 # pytest 配置

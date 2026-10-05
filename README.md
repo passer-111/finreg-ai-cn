@@ -368,14 +368,32 @@ GitHub 的运行器在境外，部分中国政府网站可能存在境外访问�
 
 ### 为什么 mypy 只检查 `src`，不检查 `tests`
 
-因为 `tests/` 下没有 `__init__.py`，加上本项目使用 src 布局，
-mypy 无法同时满足两种模块命名假设，会直接报
-「Source file found twice under different module names」。
+先说一段值得记的教训。**这里原本写的是「因为 `tests/` 下没有 `__init__.py`」，
+并把范围缩到 `src` 当作解决方案——那是规避，不是修复。**
 
-官方给的三种绕法各有副作用（详见 `pyproject.toml` 中 `[tool.mypy]` 下方的说明），
-而**一个永远红的检查比没有检查更糟**——它会让所有人习惯性地忽略红色。
-因此范围划定为 `src`：会被别人 import 的代码有严格类型保证；
-`tests` 则由「真的把它跑起来」（pytest）加 ruff 两层覆盖。
+真正的问题是：`tests/test_fetchers_offline.py` 里写了
+`from tests.conftest import ...`，**这行代码本身就在要求 `tests` 是一个包**。
+不加 `__init__.py`，这个导入就只能靠「隐式命名空间包」侥幸成立，
+而它能否解析取决于运行环境把哪个目录放进了 `sys.path`。
+
+代价在 CI 上兑现了：**本地 Windows 能跑通，ubuntu-latest 上直接收集失败**，
+pytest 报「中断：收集错误」并以退出码 2 结束；因为四个 Python 版本一视同仁
+地挂，看起来像代码问题，实际是导入机制问题。
+
+修法是补上 `tests/__init__.py`（原因与验证记录写在那个文件里）。
+补上之后，「Source file found twice under different module names」这条
+mypy 报错也随之消失——它本来就是同一个根因的另一副面孔。
+
+**但范围暂时仍保持 `src`**，因为扩到 `tests` 会撞上另一堵与本项目无关的墙：
+mypy 解析 tests 的导入链时会走进 site-packages，在 numpy 的 `.pyi` 里报
+「Type statement is only supported in Python 3.12 and greater」——
+那是第三方存根的问题，而本项目声明的 `python_version` 是 3.10。
+为一个第三方存根放宽自己的检查尺度不值得。
+
+所以结论是：**会被别人 import 的代码（`src`）有严格类型保证；
+`tests` 由「真的把它跑起来」（pytest）加 ruff 两层覆盖。**
+一个永远红的检查比没有检查更糟——它会让所有人习惯性地忽略红色。
+若将来要把范围扩到 `tests`，先解决 numpy 存根那条，别直接改配置。
 
 ---
 
