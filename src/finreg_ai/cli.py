@@ -135,6 +135,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",            # 布尔开关
         help="列出被关键词过滤丢弃的条目标题，用于复核「阈值是否定得太窄」",  # 说明
     )
+    # 允许运行已停用的源
+    fetch_parser.add_argument(
+        "--force",                      # 参数名
+        action="store_true",            # 布尔开关
+        help="连 enabled: false 的源一并抓取。用于按需拉取「刻意不放进每日流水线」的源"
+             "（如行政处罚公示——它每次产出数百条，进了变更流会淹没真正的政策变化）",  # 说明
+    )
 
     # ------------------------------------------------------------
     # validate：校验数据完整性
@@ -409,6 +416,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     report = run_pipeline(
         source_ids=args.sources,            # 指定的源列表（可能为 None）
         write_changes=not args.dry_run,     # dry-run 时不写文件
+        force=args.force,                   # --force 时连停用的源一并抓
     )
 
     # JSON 输出模式

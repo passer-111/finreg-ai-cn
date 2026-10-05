@@ -413,6 +413,171 @@ class KeyObligation:
 
 
 @dataclass
+class EnforcementRecord:
+    """一条执法记录（罚单），本项目区别于政策文件的第二种数据类型。
+
+    为什么它值得单列一个类型，而不是当作「另一种政策」
+    --------------------------------------------------
+    政策文件回答的是「应该怎么做」，执法记录回答的是「没这么做会怎样」。
+    两者的字段结构、来源形态、更新节奏、可信度判断方式都不同：
+    政策靠人工提炼义务，罚单靠机器逐行抄录公示表格。
+    硬塞进同一个类型，会逼着两边共用一套校验规则，结果是两边都约束不好。
+
+    本项目的立场：**罚单是政策的校验器，不是政策的补充**
+    ----------------------------------------------------
+    政策记录里的 ``key_obligations`` 是人工从原文提炼的，提炼得对不对
+    无从验证；而罚单里「违反数据安全管理规定」这样的表述，直接说明
+    监管实际在查什么。两者对照，才能发现「义务清单写漏了」或
+    「写了但监管根本不查」这两类问题。
+
+    因此 ``related_policies`` 是本类里**最重要的一个字段**：
+    它把「违规事实」与「对应义务」连起来。空着也能用（罚单本身仍可检索），
+    但只有填了，知识库才真正具备「反向校验义务清单」的能力。
+
+    字段填写纪律：不知道就留空，不要为了完整而填
+    --------------------------------------------
+    官方行政处罚公示**不含「处罚依据」条款**（实测人民银行公示表格只有
+    违法行为类型、处罚内容、决定机关、决定日期等列）。因此 ``legal_basis``
+    默认就是空的，这不是缺失而是事实。绝不从「违反数据安全管理规定」倒推
+    出「违反了《数据安全法》第 X 条」——那种倒推看起来很有价值，
+    但它是一条**没有出处的推断**，一旦写进记录就会和官方原文混在一起，
+    而使用者无法分辨哪条是抄的、哪条是猜的。
+    """
+
+    # ---- 第 1 组：身份（抄自公示原文） ----
+
+    # 记录唯一标识，格式 <issuer_code>-<年份>-<文号短名>，如 pbc-2026-yinfa-104
+    id: str
+    # 行政处罚决定书文号，原样抄录，如「银罚决字〔2026〕104号」
+    decision_no: str
+    # 被处罚当事人名称，原样抄录。个人当事人通常已被官方脱敏为「蒋某」
+    party: str
+
+    # ---- 第 2 组：违规事实与处罚（抄自公示原文，逐字不改） ----
+
+    # 违法行为类型。原文为多条时用换行或分号保留原貌，不要合并改写
+    violation_type: str
+    # 行政处罚内容，原样抄录，如「警告，没收违法所得1.621747万元，罚款1712.4万元」。
+    # 刻意不解析成金额数字：原文的表述方式（警告/没收/罚款组合、
+    # 是否写明具体数额）本身就是信息，解析会把它压平。
+    penalty_content: str
+    # 作出行政处罚决定的机关名称
+    authority: str
+    # 处罚依据条款。**官方公示通常不提供，留空即为正确**，理由见类文档
+    legal_basis: str | None = None
+
+    # ---- 第 3 组：时间 ----
+
+    # 作出决定日期，保留原文的中文写法（如「2026年9月8日」）。
+    # 刻意不转成 date：一是决定日期与公示日期语义不同、混用会让时间线错乱，
+    # 二是官方页面本身用中文写法，转格式等于替官方改了一遍原文。
+    decision_date: str | None = None
+    # 公示日期。来自列表页，是**该记录在官方渠道可见的时间**，与决定日期不同
+    published_on: date | None = None
+    # 公示期限，如「五年」
+    publicity_period: str | None = None
+
+    # ---- 第 4 组：归类（人工填写） ----
+
+    # 当事人类型：机构 / 个人 / 未知。个人处罚与机构处罚的意义不同
+    # （个人处罚多为对责任人追责，机构处罚才反映制度性要求）
+    party_type: str | None = None
+    # 涉及领域，如 数据安全 / 征信管理 / 支付清算
+    domain: list[str] = field(default_factory=list)
+    # 对应到本库中的政策记录 id 列表。**填了它，这份罚单才真正有用**——
+    # 它建立了「监管实际处罚的行为」与「我们提炼出的义务」之间的对应关系
+    related_policies: list[str] = field(default_factory=list)
+
+    # ---- 第 5 组：溯源 ----
+
+    # 所属法域，MVP 阶段固定为 CN
+    jurisdiction: str = "CN"
+    # 来源信息。url 必须是**该当事人所在的那份公示文书的地址**，不是机构首页
+    source: SourceRef | None = None
+    # 最近一次核验日期
+    last_verified: date | None = None
+    # 核验方式。自动化抄录的记录此处为 automated
+    verified_by: VerifiedBy = VerifiedBy.AUTOMATED
+    # 备注：核验过程、存疑之处、字段留空的原因
+    notes: str | None = None
+
+    def validate_semantics(self) -> list[str]:
+        """校验记录的业务规则，返回问题列表（空列表表示通过）。
+
+        为什么这些规则值得写进代码而不是靠自觉
+        --------------------------------------
+        罚单字段多、且大部分是抄录的，最容易出的错不是「抄错」而是
+        「补全」——人看到 legal_basis 空着会本能地想填上。
+        把「空着是正常的」和「填了必须有出处」写成可执行的校验，
+        才能让下一个人不必读完整篇设计理由就知道该怎么做。
+        """
+        # 问题收集
+        problems: list[str] = []
+
+        # 规则 1：身份字段不得为空。这两项是记录的主键与主体，缺了就无法引用
+        if not self.decision_no.strip():
+            # 决定书文号为空
+            problems.append(f"[{self.id}] decision_no 为空 —— 决定书文号是罚单的唯一标识，必须填写")
+        # 当事人必须填写
+        if not self.party.strip():
+            # 当事人为空
+            problems.append(f"[{self.id}] party 为空 —— 没有当事人就无法判断这是对谁的处理")
+
+        # 规则 2：违规事实必须填写。罚单若没有违规事实，就只剩下一个文号和金额，
+        # 对「校准判定规则」毫无用处——而校准判定规则正是本项目收录罚单的理由
+        if not self.violation_type.strip():
+            # 违规事实为空
+            problems.append(
+                f"[{self.id}] violation_type 为空 —— 违规事实是罚单的核心价值所在，"
+                f"缺了它这份记录只剩下文号与金额"
+            )
+
+        # 规则 3：自动化抄录的记录必须说明「未逐项核对」以及抄录范围。
+        # 这与政策记录的同类规则（automated 填了生效日期就必须交代出处）同一思路：
+        # 让使用者一眼看出这条记录的可信度边界在哪里。
+        if self.verified_by == VerifiedBy.AUTOMATED:
+            # 备注中应出现说明抄录性质的字样
+            if not any(hint in (self.notes or "") for hint in _DATE_BASIS_HINTS):
+                # 生成警告级问题（不阻断，但必须提示）
+                problems.append(
+                    f"{WARNING_PREFIX} [{self.id}] verified_by=automated，但 notes 未说明"
+                    f"抄录范围与核验方式 —— 请写明「字段抄自官方公示原文、未逐项人工核对」"
+                )
+
+        # 规则 4：涉及数据/信息/网络等技术类违规，却没有任何领域归类时提醒。
+        # 这条不判为错误：归类是人工工作，尚未完成是正常状态；
+        # 但它是一个明确的待办信号——本类记录的价值正是靠归类与关联建立起来的。
+        tech_hints = ("数据", "信息", "网络", "科技", "算法", "智能", "技术")
+        # 命中技术类词但未归类
+        if any(h in self.violation_type for h in tech_hints) and not self.domain:
+            # 提示归类
+            problems.append(
+                f"{WARNING_PREFIX} [{self.id}] 违规事实涉及技术类管理要求，但 domain 为空"
+                f" —— 建议归类，否则无法按领域聚合出「监管实际在查什么」"
+            )
+
+        # 规则 5：法律依据若填写，必须交代出处，禁止倒推。
+        # 官方公示不含处罚依据，因此这个字段一旦有值，必然是有人查了别的材料。
+        # 要求写明出处，是为了防止「从违法行为类型倒推条款」这种无出处的推断
+        # 混进记录——它看起来很有价值，但使用者无法分辨它是抄的还是猜的。
+        #
+        # 词表里**刻意没有「原文」**。实测发现：automated 记录必须写的抄录范围
+        # 说明（「字段抄自官方公示原文，未逐项人工核对」）里天然含「原文」，
+        # 于是这条规则对所有合规填写的记录一律不触发——规则形同虚设，
+        # 而校验输出依旧是「通过」。这类「因为撞词而永不触发」的规则
+        # 比没有规则更危险，它会让人以为这一项已经被守住了。
+        if self.legal_basis and not any(h in (self.notes or "") for h in ("依据", "出处", "来源", "条款")):
+            # 缺出处
+            problems.append(
+                f"{WARNING_PREFIX} [{self.id}] 填写了 legal_basis，但 notes 未说明该依据的出处"
+                f" —— 官方公示表格不含处罚依据，此值必然是另查所得，请写明来源"
+            )
+
+        # 返回问题列表
+        return problems
+
+
+@dataclass
 class Issuer:
     """发布机构。
 
@@ -477,6 +642,15 @@ class Source:
     # HTML 选择器方案拿不到条目，必须走内部 JSON 接口。
     # 因此这个配置项的实际使用频率高于 selectors。
     api: dict[str, Any] | None = None
+    # 详情页表格解析配置，供 penalty_table 抓取器使用。
+    #
+    # 为什么单开一个键而不塞进 selectors：
+    # selectors 描述的是**列表页**的定位方式，而行政处罚这类源的
+    # 关键信息在**详情页的表格**里——列表页只给出一个文号。
+    # 两者作用在不同页面上，混在一个键里会让「改选择器时该改哪一项」
+    # 变得需要读代码才能判断。本项目已有 api 与 selectors 分列的先例，
+    # 这里沿用同一风格：按抓取器族划分配置键。
+    penalty: dict[str, Any] | None = None
     # 关键词过滤规则
     filters: dict[str, Any] | None = None
     # 数据源备注：已知的网络可达性问题、反爬情况、结构变更历史
@@ -1057,6 +1231,106 @@ def source_from_dict(data: dict[str, Any]) -> Source:
         pagination=data.get("pagination"),                              # 分页配置
         selectors=data.get("selectors"),                                # 选择器配置
         api=data.get("api"),                                            # JSON 接口配置
+        penalty=data.get("penalty"),                                    # 详情页表格解析配置（罚单专用）
         filters=data.get("filters"),                                    # 过滤规则
         notes=data.get("notes"),                                        # 备注
     )
+
+
+def enforcement_from_dict(data: dict[str, Any]) -> EnforcementRecord:
+    """把字典转成 ``EnforcementRecord`` 对象。
+
+    与 ``policy_from_dict`` 保持同一套约定：字段整体缺失时抛 ``KeyError``，
+    字段存在但取值无法解释时抛 ``ValueError``，
+    两者都由 ``store.load_all_enforcement`` 捕获并归入该文件的错误列表，
+    不会让整批数据加载中断。
+
+    ``violation_type`` / ``penalty_content`` 等「逐字抄录」字段刻意保持
+    与 ``policy_from_dict`` 相同的处理方式（走 ``_parse_text`` 归一化），
+    而不是在这里做更强的类型检查——因为**「处罚内容必须是字符串」这条约束
+    已经在 schema 层拦下了**（``enforcement.schema.json`` 里这些字段
+    声明为 ``"type": "string"``），而 ``load_enforcement_file`` 会先跑 schema。
+    在模型层重复一遍只会造成两处约束各自演化。
+    """
+    # 来源溯源：schema 把它定为必填，因此这里用下标取值，缺失即报错
+    src = data["source"]
+    # 构造来源对象
+    source_ref = SourceRef(
+        url=_parse_text(src["url"]) or "",              # 公示文书地址（必须是该文书，不是机构首页）
+        site=_parse_text(src["site"]) or "",            # 站点域名
+        # fetched_at 同样要过 _parse_text 归一化：YAML 里不带引号的
+        # ISO 时间戳会被 PyYAML 解析成 datetime 对象
+        fetched_at=_parse_text(src["fetched_at"]) or "",# 抓取时间
+        tier=SourceTier(src.get("tier", "primary")),    # 来源等级，默认 primary
+        http_status=src.get("http_status"),             # HTTP 状态码
+    )
+
+    # 构造记录对象，逐字段转换
+    return EnforcementRecord(
+        # ---- 身份 ----
+        id=data["id"],                                                  # 唯一标识
+        decision_no=_parse_text(data["decision_no"]) or "",              # 决定书文号
+        party=_parse_text(data["party"]) or "",                          # 当事人
+        # ---- 违规事实与处罚 ----
+        violation_type=_parse_text(data["violation_type"]) or "",        # 违法行为类型（原文）
+        penalty_content=_parse_text(data["penalty_content"]) or "",      # 处罚内容（原文）
+        authority=_parse_text(data["authority"]) or "",                  # 决定机关
+        legal_basis=_parse_text(data.get("legal_basis")),                # 处罚依据，默认空
+        # ---- 时间 ----
+        decision_date=_parse_text(data.get("decision_date")),            # 决定日期（保留中文写法）
+        published_on=_parse_date(data.get("published_on")),              # 公示日期
+        publicity_period=_parse_text(data.get("publicity_period")),      # 公示期限
+        # ---- 归类（人工） ----
+        party_type=data.get("party_type"),                               # 当事人类型
+        domain=list(data.get("domain", [])),                             # 涉及领域
+        related_policies=list(data.get("related_policies", [])),         # 关联政策 id
+        # ---- 溯源 ----
+        jurisdiction=data.get("jurisdiction", "CN"),                     # 法域
+        source=source_ref,                                               # 来源
+        last_verified=_parse_date(data.get("last_verified")),            # 最近核验日期
+        verified_by=VerifiedBy(data["verified_by"]),                     # 核验方式（必填）
+        notes=_parse_text(data.get("notes")),                            # 备注
+    )
+
+
+def enforcement_to_dict(record: EnforcementRecord) -> dict[str, Any]:
+    """把 ``EnforcementRecord`` 转回可序列化为 YAML 的字典。
+
+    字段顺序与 ``enforcement.schema.json`` 的 required 列表一致，
+    这样生成的 YAML 在 diff 时更易读。date 与 Enum 需转成字符串，
+    因为 YAML 序列化器无法直接处理它们。
+    """
+    # 构造结果字典，键顺序即为 YAML 输出顺序
+    return {
+        # ---- 身份 ----
+        "id": record.id,                                        # 唯一标识
+        "decision_no": record.decision_no,                      # 决定书文号
+        "party": record.party,                                  # 当事人
+        "party_type": record.party_type,                        # 当事人类型
+        # ---- 违规事实与处罚（逐字抄录） ----
+        "violation_type": record.violation_type,                # 违法行为类型
+        "penalty_content": record.penalty_content,              # 处罚内容
+        "authority": record.authority,                          # 决定机关
+        "legal_basis": record.legal_basis,                      # 处罚依据（通常为空）
+        # ---- 时间 ----
+        "decision_date": record.decision_date,                  # 决定日期（中文原文）
+        # date 对象需转 ISO 字符串；None 原样保留
+        "published_on": record.published_on.isoformat() if record.published_on else None,
+        "publicity_period": record.publicity_period,            # 公示期限
+        # ---- 归类 ----
+        "domain": list(record.domain),                          # 涉及领域
+        "related_policies": list(record.related_policies),      # 关联政策 id
+        # ---- 溯源 ----
+        "jurisdiction": record.jurisdiction,                    # 法域
+        "source": {
+            "url": record.source.url if record.source else "",           # 公示文书地址
+            "site": record.source.site if record.source else "",         # 站点域名
+            "fetched_at": record.source.fetched_at if record.source else "",  # 抓取时间
+            # 枚举转字符串；无来源时回落到 primary（schema 只允许这个默认值）
+            "tier": (record.source.tier.value if record.source else "primary"),
+            "http_status": record.source.http_status if record.source else None,  # HTTP 状态码
+        },
+        "last_verified": record.last_verified.isoformat() if record.last_verified else None,  # 核验日期
+        "verified_by": record.verified_by.value,               # 核验方式
+        "notes": record.notes,                                 # 备注
+    }

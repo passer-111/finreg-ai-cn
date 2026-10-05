@@ -76,11 +76,22 @@ class Change:
     url: str | None = None
     # 涉及的具体字段（元数据变更时记录改了哪些字段）
     fields: list[str] = field(default_factory=list)
+    # 来源特有的结构化内容，来自 RawDoc.extra，原样透传不做加工。
+    #
+    # 目前只有行政处罚公示会用到：一条罚单的结构化内容是
+    # 「当事人 / 决定书文号 / 违法行为类型 / 处罚内容 / 决定机关 / 决定日期」，
+    # 而它的 title 位置只有一个文号（「银罚决字〔2026〕104-116号」）。
+    # 不带上这些字段，人工复核时就得逐条点开官网原文，
+    # 「罚单校准判定规则」这件事会退化成体力活。
+    #
+    # 空字典表示该条变更没有额外内容，序列化时不应出现该键——
+    # 变更文件是公开产物，不该为绝大多数条目填一堆空对象。
+    extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """转为可 JSON 序列化的字典。"""
         # 逐字段输出，日期转 ISO 字符串
-        return {
+        result: dict[str, Any] = {
             "change_type": self.change_type,                    # 变更类型
             "policy_id": self.policy_id,                        # 政策标识
             "title": self.title,                                # 政策标题
@@ -90,6 +101,12 @@ class Change:
             "url": self.url,                                    # 官方链接
             "fields": self.fields,                              # 涉及字段
         }
+        # 仅有额外内容时才输出该键，避免公开产物里塞满空对象
+        if self.extra:
+            # 附上结构化内容
+            result["extra"] = self.extra
+        # 返回
+        return result
 
 
 @dataclass
@@ -293,6 +310,20 @@ def diff_discovered(docs: Iterable[RawDoc], known_urls: set[str], today: date) -
         if doc.url in known_urls:
             # 继续下一条
             continue
+        # 条目自带结构化内容时（目前仅行政处罚公示），
+        # 把「违法行为类型」拼进说明里。理由：这类条目的标题只是一个文号
+        # （「银罚决字〔2026〕104-116号」），若不把违规事由写进说明，
+        # 变更流里就只剩一串无法判断相关性的编号。
+        extra = doc.extra or {}
+        # 取出违规事由（不同源的键名可能不同，缺失时为空串）
+        violation = str(extra.get("violation_type") or "")
+        # 有违规事由时拼接进说明
+        detail = (
+            f"发现新条目待录入：{doc.title}（来源：{doc.source_id}）"
+            if not violation
+            else f"发现新处罚待录入：{doc.title}（来源：{doc.source_id}）\n"
+                 f"        违法行为类型：{violation}"
+        )
         # 追加「已发现待录入」变更
         changes.append(
             Change(
@@ -301,8 +332,9 @@ def diff_discovered(docs: Iterable[RawDoc], known_urls: set[str], today: date) -
                 title=doc.title,                                                     # 标题
                 detected_on=today,                                                   # 检测日期
                 significance="medium",                                               # 中优先级，等待人工判断
-                detail=f"发现新条目待录入：{doc.title}（来源：{doc.source_id}）",     # 说明
+                detail=detail,                                                       # 说明（罚单附违规事由）
                 url=doc.url,                                                         # 官方链接
+                extra=dict(extra),                                                   # 结构化内容原样透传
             )
         )
     # 返回结果

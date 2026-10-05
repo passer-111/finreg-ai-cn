@@ -116,6 +116,23 @@ class RawDoc:
     raw_html: str | None = None
     # 抓取时间
     fetched_at: str = field(default_factory=now_china_iso)
+    # 来源特有的结构化字段，原样透传到变更记录。
+    #
+    # 为什么需要这个「口子」
+    # --------------------
+    # 大多数源的条目只含标题/链接/日期三项，但行政处罚公示不是：
+    # 一条罚单的结构化内容是「当事人 / 决定书文号 / 违法行为类型 /
+    # 处罚内容 / 决定机关 / 决定日期」，标题位置只有一个文号
+    # （如「银罚决字〔2026〕104-116号」），本身毫无信息量。
+    #
+    # 若不开口子，罚单只能退化成「标题 + 链接」，人工复核时还得逐条点开原文；
+    # 若把结构硬塞进 title，则是在污染一个语义明确的字段——
+    # 会让标题去重、关键词过滤、变更比对全部失准。
+    #
+    # 约定：本字段只放**从官方页面原样抄录的结构化字段**，
+    # 不放任何推断、摘要或模型生成内容（与「事实性字段不由大模型生成」一致）。
+    # 空字典表示该源没有额外字段，序列化时不应出现。
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -333,14 +350,32 @@ class BaseFetcher(abc.ABC):
         # 猜不到时退回 HTTP 头声明的编码
         return response.encoding or "utf-8"
 
-    def fetch(self) -> FetchResult:
+    def fetch(self, force: bool = False) -> FetchResult:
         """执行一次完整抓取：请求列表页 → 解析 → 过滤。
 
         这是对外的主入口。所有异常都在此被捕获并转成 FetchResult，
         保证调用方永远拿到结果对象而非异常。
+
+        参数 ``force``
+        --------------
+        置为 True 时**忽略 ``enabled: false`` 而照常抓取**。
+
+        为什么需要它：`enabled: false` 表达的是「不要放进每日流水线」，
+        而不是「这个源永远不许运行」。两者常常被混为一谈，于是维护者
+        为了试跑一个停用的源，只能先把 YAML 改成 true、跑完再改回来——
+        而「忘了改回来」会让一个已知有问题的源重新进入每日流水线，
+        「改了却忘了提交」则会让排查结论无法复现。
+
+        典型用途：人工重测一个因结构变更而停用的源；按需拉取
+        行政处罚这类**刻意不放进每日流水线**的源（它的产出量级是
+        每天数百条，进了变更流会淹没真正的政策变化）。
+
+        注意 ``force`` 只绕过启用开关，不绕过其它前置检查：
+        manual 类型与缺失 list_url 仍然会被拦下，因为那两项不是
+        「愿不愿意跑」的问题，而是「跑不起来」。
         """
-        # 源被禁用时直接跳过
-        if not self.source.enabled:
+        # 源被禁用时直接跳过——除非调用方明确要求强制运行
+        if not self.source.enabled and not force:
             # 返回 skipped 状态，说明原因
             return FetchResult(source_id=self.source.id, status="skipped", error="数据源已禁用")
         # manual 类型不抓取
@@ -382,8 +417,18 @@ class BaseFetcher(abc.ABC):
         # 这类链接不是政策文件，但标题里可能恰好含有关键词，
         # 从而骗过关键词过滤被当作政策收录——这是最隐蔽的一种污染。
         cleaned = drop_probable_navigation(deduped, self.source.list_url or "")
-        # 记录剔除数量，供上层在报告中显示
-        dropped_nav = len(deduped) - len(cleaned)
+        # 记录剔除数量，供上层在报告中显示。
+        #
+        # 除了这里算出的差值，还要并入**子类在 _collect 内部就已剔除**的数量。
+        # 为什么：某些抓取器必须在收集阶段就剔除导航——处罚抓取器要为列表里
+        # 每一条打开详情页，若不先剔除，导航项会把详情页配额全部吃光
+        # （本项目真实踩过：20 个配额全被「政府信息公开年报」这类栏目页消耗）。
+        # 那部分剔除同样属于「被剔除的导航链接」，不并入的话报告会显示 0 条，
+        # 而实际剔了几十条——一个不可见的清洗动作，正是本项目最忌讳的东西。
+        dropped_nav = (
+            len(deduped) - len(cleaned)                       # 本层剔除了多少
+            + getattr(self, "_upstream_dropped_navigation", 0)  # 子类在收集阶段已剔除多少
+        )
 
         # 第 3 步：应用关键词过滤，并记录丢弃原因计数。
         # 这里用 filter_docs_with_reasons 而非 apply_filters——后者只返回保留结果，
@@ -609,6 +654,43 @@ DROP_REASON_EXCLUDED = "excluded"        # 命中 exclude_keywords 被排除
 DROP_REASON_NOT_MATCHED = "not_matched"  # 未命中任何 include_keywords
 
 
+def filter_haystack(doc: RawDoc) -> str:
+    """拼出关键词匹配用的文本：标题 + 来源原样抄录的结构化字段值。
+
+    为什么不能只看标题
+    ------------------
+    标题是「给人看的一行字」，长度有限；而关键词过滤要回答的是
+    「这条记录里有没有出现这个词」。把两者当成同一件事，
+    就会造出一个看不见的过滤器。实测的例子：
+
+    罚单抓取器把「违法行为类型」截断到 60 字后拼进标题，而某行原文是
+    「…4.违反银行卡收单业务管理规定; 5.违反数据安全管理规定; 6.…」，
+    「数据安全」恰好从第 59 个字符开始——**被切在词中间**，标题里剩下
+    「违反数…」。于是「这条罚单与数据安全有关」变成了「这条罚单不存在」，
+    而截断点落在词内，连人工排查时都看不出这里本来有个完整的关键词。
+
+    匹配范围因此取「标题 + ``extra`` 里的全部字符串值」。``extra`` 的定义是
+    「从官方页面原样抄录的结构化字段」，与标题同属来源自己给出的信息，
+    不是本项目的推断结果，匹配它不引入新的语义。
+
+    使用上的一个陷阱：若某源的 ``extra`` 里放了机构名、机关名，而包含词里
+    又有「银行」这类宽泛词，会命中大量无关记录。风险不是静默的——
+    ``excluded`` / ``not_matched`` 的分布会把异常暴露出来。
+    """
+    # 匹配范围，标题打头
+    parts = [doc.title or ""]
+    # 叠加结构化字段里的字符串值。只取字符串：数字（如 2026）不该参与
+    # 中文关键词比较，而配置里也不应出现纯数字关键词。
+    for value in (doc.extra or {}).values():
+        # 跳过空值与非字符串
+        if isinstance(value, str) and value:
+            # 加入匹配范围
+            parts.append(value)
+    # 用换行连接。分隔符在这里是有作用的，不只是排版：若直接首尾相接，
+    # 前一个字段的结尾与后一个字段的开头会拼出一个原本不存在的词。
+    return "\n".join(parts)
+
+
 def filter_docs_with_reasons(
     docs: Iterable[RawDoc], filters: dict[str, Any] | None
 ) -> tuple[list[RawDoc], dict[str, int]]:
@@ -627,6 +709,12 @@ def filter_docs_with_reasons(
 
     区分两种丢弃原因的价值：``excluded`` 多说明排除词写得太宽，
     ``not_matched`` 多说明包含词写得太窄——两者要采取的行动完全相反。
+
+    匹配范围
+    --------
+    标题 **加上** ``extra`` 里的结构化字段值（见 ``filter_haystack``）。
+    只匹配标题是不够的：罚单这类来源的标题是截断后重建的，
+    关键词可能正好落在截断点之后而被无声丢掉。
 
     过滤规则的设计原则（沿用原实现）：
     1. **包含规则宽松**：宁可多留几条让人工筛掉，也不要漏掉重要政策
@@ -652,10 +740,11 @@ def filter_docs_with_reasons(
     kept: list[RawDoc] = []
     # 逐条判断
     for doc in docs:
-        # 标题文本；标题为 None 时按空串处理，避免在其上做子串判断
-        title = doc.title or ""
+        # 匹配文本：标题 + 来源原样抄录的结构化字段。不用 doc.title 直接判断，
+        # 否则被截断的字段内容会从过滤视野里消失。
+        haystack = filter_haystack(doc)
         # 排除规则优先：命中任一排除词即丢弃
-        if any(word in title for word in exclude):
+        if any(word in haystack for word in exclude):
             # 累计「被排除」计数后跳过该条
             reasons[DROP_REASON_EXCLUDED] = reasons.get(DROP_REASON_EXCLUDED, 0) + 1
             # 进入下一条
@@ -667,7 +756,7 @@ def filter_docs_with_reasons(
             # 进入下一条
             continue
         # 命中任一包含词即保留
-        if any(word in title for word in include):
+        if any(word in haystack for word in include):
             # 保留
             kept.append(doc)
             # 进入下一条

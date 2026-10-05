@@ -151,6 +151,7 @@ _DEFAULT_SOURCE: dict[str, Any] = {
     "pagination": None,               # 无分页配置
     "selectors": None,                # 无选择器
     "api": None,                      # 无接口配置
+    "penalty": None,                  # 无详情页表格配置
     "filters": None,                  # 无过滤规则
     "notes": None,                    # 无备注
 }

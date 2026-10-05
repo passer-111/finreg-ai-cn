@@ -104,8 +104,8 @@
           },
           "fetcher": {
             "type": "string",
-            "description": "使用的抓取器类型。json_search_list 是配置驱动的通用 JSON 接口抓取器，覆盖中国政府 CMS 的 /searchList 接口族（首选，因为多数监管网站列表页为 JS 渲染）。html_list 是配置驱动的通用 HTML 列表抓取器，用于仍采用服务端渲染的站点。其余为特定站点专用抓取器。",
-            "enum": ["json_search_list", "html_list", "nfra", "pbc", "cac", "csrc", "manual"]
+            "description": "使用的抓取器类型。json_search_list 是配置驱动的通用 JSON 接口抓取器，覆盖中国政府 CMS 的 /searchList 接口族（首选，因为多数监管网站列表页为 JS 渲染）。html_list 是配置驱动的通用 HTML 列表抓取器，用于仍采用服务端渲染的站点。penalty_table 是行政处罚专用抓取器，先取列表页的文书地址、再逐个打开详情页把表格逐行还原——它存在的理由是行政处罚列表页的标题只有文号，通用的标题关键词过滤在那里完全失效。其余为特定站点专用抓取器。注意 nfra 专用抓取器已于 2026-10-03 删除（该站实为标准 JSON 接口），故此处不再列出。",
+            "enum": ["json_search_list", "html_list", "pbc", "cac", "csrc", "penalty_table", "manual"]
           },
           "list_url": {
             "type": ["string", "null"],
@@ -224,6 +224,28 @@
                 "description": "每页条数，用于判断末页与组装请求参数",
                 "minimum": 1,
                 "default": 18
+              }
+            },
+            "default": null
+          },
+          "penalty": {
+            "type": ["object", "null"],
+            "description": "详情页表格解析配置，供 penalty_table 抓取器使用。与 selectors 分列的原因：两者作用于不同页面——selectors 描述「列表页」如何定位一份文书，penalty 描述「详情页」如何把表格还原成逐条记录。行政处罚公示的关键信息全在详情页，列表页只给出一个文号。",
+            "additionalProperties": false,
+            "properties": {
+              "row": {
+                "type": "string",
+                "description": "详情页数据行的 CSS 选择器，默认 table tr"
+              },
+              "columns": {
+                "type": "object",
+                "description": "列名到「表头文字」的映射。必须按表头文字定位列而不是按列序号——列序号是排版细节会随改版变化，而表头文字是这一列的身份。按序号取值的失败方式是字段悄悄错位且不报错，属静默错误。键为 party / decision_no / violation_type / penalty_content / authority / decision_date / publicity_period。",
+                "additionalProperties": {"type": "string"}
+              },
+              "max_details": {
+                "type": "integer",
+                "description": "本次运行最多打开多少个详情页。每个详情页都是一次独立请求，设上限既是对监管服务器的礼貌，也避免抓取耗时超出工作流超时限制。",
+                "minimum": 1
               }
             },
             "default": null

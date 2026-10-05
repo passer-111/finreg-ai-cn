@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/passer-111/finreg-ai-cn/schema/enforcement.schema.json",
+  "title": "执法记录（行政处罚）",
+  "description": "定义 data/enforcement/ 下每条处罚记录的结构。这是本项目区别于政策文件的第二种数据类型：政策文件回答「应该怎么做」，执法记录回答「没这么做会怎样」。两者字段结构、来源形态、可信度判断方式都不同，因此单列一个 schema，而不是硬塞进 policy.schema.json。关于「谁能写这个目录」：抓取器只把公示表格的原始行写进变更流的 extra 字段，**从不写这里**——与「抓取器绝不写 data/policies/」是同一条原则（机器负责发现，人负责认定）。但注意「认定」与「核验」是两件事：人可以认定一条罚单值得收录、同时尚未逐字核对字段，此时该记录合法，但 verified_by 必须是 automated，且 notes 要写明抄录范围。verified_by 记录的是**字段值是如何确认的**，不是「谁决定收录它」。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "decision_no",
+    "party",
+    "violation_type",
+    "penalty_content",
+    "authority",
+    "jurisdiction",
+    "source",
+    "verified_by"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "记录唯一标识，格式 <issuer_code>-<年份>-<文号短名>，例如 pbc-2026-yinfa-104。与政策记录一样，id 一旦分配不得变更。",
+      "pattern": "^[a-z][a-z0-9_]*-[0-9]{4}-[a-z0-9-]+$"
+    },
+    "decision_no": {
+      "type": "string",
+      "description": "行政处罚决定书文号，必须与官方公示完全一致（含括号全半角形式）。例如「银罚决字〔2026〕104号」。",
+      "minLength": 4
+    },
+    "party": {
+      "type": "string",
+      "description": "被处罚当事人名称，原样抄录。个人当事人通常已被官方脱敏为「蒋某」，不要试图还原真实姓名。",
+      "minLength": 2
+    },
+    "party_type": {
+      "type": ["string", "null"],
+      "description": "当事人类型。区分机构与个人是有意义的：对个人的处罚多为责任人追责，只有对机构的处罚才反映制度性的合规要求。未判断时留空。",
+      "enum": ["institution", "individual", "unknown", null],
+      "default": null
+    },
+    "violation_type": {
+      "type": "string",
+      "description": "违法行为类型，原样抄录官方公示的表述。这是本类记录的核心价值所在——它直接说明监管实际在查什么，而政策原文只会说「应当如何」。多项违规时用换行或分号保留原貌，禁止合并改写。",
+      "minLength": 2
+    },
+    "penalty_content": {
+      "type": "string",
+      "description": "行政处罚内容，原样抄录。例如「警告，没收违法所得1.621747万元，罚款1712.4万元」。刻意不拆成结构化的金额数字：原文的表述方式（警告/没收/罚款的组合、是否写明具体数额）本身就是信息，拆解会把它压平。",
+      "minLength": 2
+    },
+    "authority": {
+      "type": "string",
+      "description": "作出行政处罚决定的机关名称，须与该机构的官方全称一致。",
+      "minLength": 2
+    },
+    "legal_basis": {
+      "type": ["string", "null"],
+      "description": "处罚依据的法律法规条款。**官方行政处罚公示通常不提供此项**（实测人民银行公示表格只有违法行为类型、处罚内容、决定机关、决定日期等列），因此默认留空是正确状态而非缺失。若填写，必须在 notes 中写明该依据的出处——本条的目的正是防止「从违法行为类型倒推条款」这类无出处的推断混进记录。",
+      "default": null
+    },
+    "decision_date": {
+      "type": ["string", "null"],
+      "description": "作出行政决定的日期，保留官方页面的中文写法（如「2026年9月8日」）。刻意不转成 ISO 格式，理由有二：一是决定日期与公示日期语义不同，格式相似会让两者被混用；二是官方页面本身用中文写法，转格式等于替官方改写了一遍原文。",
+      "default": null
+    },
+    "published_on": {
+      "type": ["string", "null"],
+      "description": "公示日期（该记录在官方渠道可见的日期），ISO 8601 格式 YYYY-MM-DD。与 decision_date 不是一回事。",
+      "format": "date",
+      "default": null
+    },
+    "publicity_period": {
+      "type": ["string", "null"],
+      "description": "公示期限，原样抄录，例如「五年」。",
+      "default": null
+    },
+    "jurisdiction": {
+      "type": "string",
+      "description": "所属法域。MVP 阶段固定为 CN。",
+      "default": "CN"
+    },
+    "domain": {
+      "type": "array",
+      "description": "涉及领域标签，如 数据安全 / 征信管理 / 支付清算。归类是人工工作，未归类时留空数组是正常状态，但校验器会针对「违规事实明显涉及技术类管理要求却未归类」给出提示。",
+      "items": {
+        "type": "string",
+        "minLength": 2
+      },
+      "default": []
+    },
+    "related_policies": {
+      "type": "array",
+      "description": "对应到本库中的政策记录 id。**这是本类记录里最重要的一个字段**：它把「监管实际处罚的行为」与「我们从政策里提炼出的义务」连起来。空着也能用（罚单本身仍可检索），但只有填了，知识库才具备反向校验义务清单的能力——能发现「义务写漏了」或「写了但监管根本不查」这两类问题。引用的 id 必须存在于 data/policies/。",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "source": {
+      "type": "object",
+      "description": "来源溯源信息。url 必须指向**该当事人所在的那份公示文书**，不是发布机构首页——指向首页会让「可核验」这个前提直接失效。",
+      "additionalProperties": false,
+      "required": ["url", "site", "fetched_at"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "官方公示文书地址",
+          "format": "uri",
+          "pattern": "^https?://"
+        },
+        "site": {
+          "type": "string",
+          "description": "来源站点域名",
+          "pattern": "^[a-z0-9.-]+\\.[a-z]{2,}$"
+        },
+        "fetched_at": {
+          "type": "string",
+          "description": "最近一次获取该页面的时间，ISO 8601 带时区偏移"
+        },
+        "tier": {
+          "type": "string",
+          "description": "来源权威等级。本项目只允许 primary 源写入记录。",
+          "enum": ["primary", "secondary"],
+          "default": "primary"
+        },
+        "http_status": {
+          "type": ["integer", "null"],
+          "description": "抓取时的 HTTP 状态码；非 200 说明官方页面可能异常",
+          "default": null
+        }
+      }
+    },
+    "last_verified": {
+      "type": ["string", "null"],
+      "description": "最近一次人工核验日期，ISO 8601 格式 YYYY-MM-DD。",
+      "format": "date",
+      "default": null
+    },
+    "verified_by": {
+      "type": "string",
+      "description": "最近一次核验的执行方式。human 表示已由人工打开官方页面逐项核对；automated 表示仅由机器抄录、未逐项核对。此字段决定使用者应以何种信任程度对待这条记录，必填。",
+      "enum": ["human", "automated"]
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "备注：核验过程、存疑之处、字段留空的原因。automated 记录的 notes 必须说明抄录范围与核验方式，否则校验器会提示。",
+      "default": null
+    }
+  }
+}

@@ -47,11 +47,13 @@ from finreg_ai.fetchers import build_fetcher, now_china_iso, today_china
 from finreg_ai.fetchers.base import FetchResult
 from finreg_ai.models import Source, is_warning, strip_warning_prefix
 from finreg_ai.store import (
-    CHANGES_DIR,                 # 变更流输出目录
-    find_stale_policies,         # 陈旧记录查找
-    load_all_policies,           # 加载全部政策
-    load_sources,                # 加载数据源登记表
-    validate_cross_references,   # 跨记录一致性校验
+    CHANGES_DIR,                        # 变更流输出目录
+    find_stale_policies,                # 陈旧记录查找
+    load_all_enforcement,               # 加载全部执法记录（罚单）
+    load_all_policies,                  # 加载全部政策
+    load_sources,                       # 加载数据源登记表
+    validate_cross_references,          # 政策间跨记录一致性校验
+    validate_enforcement_references,    # 执法记录到政策的引用校验
 )
 
 
@@ -158,11 +160,18 @@ class PipelineReport:
 def fetch_all(
     sources: dict[str, Source],
     source_ids: Sequence[str] | None = None,
+    force: bool = False,
 ) -> list[FetchResult]:
     """逐源抓取，返回各源结果列表。
 
     参数 source_ids 为 None 时抓取全部启用的源；
     指定时只抓取列出的源（用于手动重试单个失败的源）。
+
+    参数 force 为 True 时忽略 ``enabled: false``，
+    允许按需运行一个「刻意不放进每日流水线」的源。
+    典型场景是行政处罚公示：它每次会产出数百条记录，
+    放进每日变更流会淹没真正的政策变化，因此常年 enabled: false，
+    但维护者仍需要能主动去拉一次。
     """
     # 结果容器
     results: list[FetchResult] = []
@@ -175,8 +184,8 @@ def fetch_all(
         # 构造抓取器
         fetcher = build_fetcher(source)
         try:
-            # 执行抓取
-            result = fetcher.fetch()
+            # 执行抓取（force 会透传下去，绕过源自身的启用开关）
+            result = fetcher.fetch(force=force)
         except Exception as exc:  # noqa: BLE001  这是「单源隔离」的最后一道保险
             # 构造失败结果而非让异常中断循环。
             # 注意基类的 fetch() 内部已捕获绝大多数异常，
@@ -222,11 +231,17 @@ def run_pipeline(
     source_ids: Sequence[str] | None = None,
     today: date | None = None,
     write_changes: bool = True,
+    force: bool = False,
 ) -> PipelineReport:
     """执行完整流水线，返回报告。
 
     参数 today 允许注入固定日期以便测试；
-    参数 write_changes 控制是否落盘变更流文件（测试时可关）。
+    参数 write_changes 控制是否落盘变更流文件（测试时可关）；
+    参数 force 允许运行 `enabled: false` 的源（见 fetch_all 的说明）。
+
+    注意 force 与「是否写变更流」是两个独立开关。按需运行罚单这类
+    高产出的源时，通常希望 **force=True 且 write_changes=False**：
+    既拿到数据，又不让数百条记录灌进当天的变更文件。
     """
     # 确定运行日期：未指定时取北京时间今天
     run_on = today or today_china()
@@ -251,8 +266,17 @@ def run_pipeline(
     # 版本链闭合性检查：声称被某文件取代，该文件必须存在
     report.validation_errors.extend(validate_cross_references(policies))
 
+    # 执法记录（罚单）同样纳入这一步：抓取前先把「库里已有的数据是否自洽」
+    # 说清楚，否则抓完之后很难分清某个问题是本次引入的还是本来就有的。
+    # 目录为空是合法状态，此时这里什么都不做。
+    enforcement, enforcement_errors = load_all_enforcement()
+    # 收集执法记录自身的问题
+    report.validation_errors.extend(enforcement_errors)
+    # 罚单到政策的引用必须闭合
+    report.validation_errors.extend(validate_enforcement_references(enforcement, policies))
+
     # --- 第 4 步：逐源抓取（单源隔离） ---
-    report.fetch_results = fetch_all(sources, source_ids)
+    report.fetch_results = fetch_all(sources, source_ids, force=force)
 
     # --- 第 5 步：比对，产出变更 ---
     # 收集本次抓到的全部条目
@@ -334,8 +358,18 @@ def validate_repository(
     # 收集记录问题
     raw_issues.extend(policy_errors)
 
+    # 校验全部执法记录（罚单）。目录不存在或为空都是合法状态，返回空集合。
+    # 把执法记录纳入 validate 而不是另起一个命令，是因为「罚单引用了一条
+    # 并不存在的政策」这类问题是数据一致性问题，与版本链断链同类，
+    # 放在同一个闸门里才会被同一批人看到。
+    enforcement, enforcement_errors = load_all_enforcement()
+    # 收集执法记录问题
+    raw_issues.extend(enforcement_errors)
+
     # 跨记录一致性校验（这类问题一律为错误，不含警告）
     raw_issues.extend(validate_cross_references(policies))
+    # 执法记录到政策的引用必须闭合
+    raw_issues.extend(validate_enforcement_references(enforcement, policies))
 
     # 拆分错误与警告
     errors, warnings = split_issues(raw_issues)

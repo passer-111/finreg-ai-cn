@@ -24,16 +24,33 @@ from finreg_ai.fetchers.base import (
     dedupe_by_url,
     drop_probable_navigation,
     filter_docs_with_reasons,
+    filter_haystack,
 )
 
 # 人民银行规范性文件列表页的真实地址，作为「列表页层数」的比较基准
 PBC_LIST_URL = "http://www.pbc.gov.cn/tiaofasi/144941/3581332/index.html"
 
 
-def make_doc(title: str, url: str, published_on: date | None = None) -> RawDoc:
-    """构造测试用 ``RawDoc``，减少重复样板代码。"""
+def make_doc(
+    title: str,
+    url: str,
+    published_on: date | None = None,
+    extra: dict | None = None,
+) -> RawDoc:
+    """构造测试用 ``RawDoc``，减少重复样板代码。
+
+    ``extra`` 默认为 None 而不是 {}：``RawDoc.extra`` 的默认值就是空字典，
+    若这里默认给一个可变字面量，多个测试之间会共享同一个 dict 对象，
+    一处改动会影响别处——这类串味极难排查。
+    """
     # 组装条目，source_id 固定为测试标识
-    return RawDoc(title=title, url=url, source_id="test", published_on=published_on)
+    return RawDoc(
+        title=title,
+        url=url,
+        source_id="test",
+        published_on=published_on,
+        extra=extra or {},
+    )
 
 
 # ============================================================
@@ -426,3 +443,123 @@ def test_apply_filters_agrees_with_filter_docs_with_reasons() -> None:
     via_direct, _reasons = filter_docs_with_reasons(docs, filters)
     # 结果必须完全一致
     assert [d.url for d in via_wrapper] == [d.url for d in via_direct]
+
+
+# ============================================================
+# 关键词匹配范围：标题 + extra 里的结构化字段
+# ------------------------------------------------------------
+# 这一段的存在理由是一次实测到的静默丢失：罚单抓取器把「违法行为类型」
+# 截断后拼进标题，某个关键词落在截断点之后——甚至被切在词中间——
+# 就从过滤视野里消失了。记录被丢弃，原因记为「未命中包含词」，
+# 与「这条罚单确实与数据安全无关」在报告里长得一模一样。
+# ============================================================
+
+def test_filter_haystack_concatenates_title_and_extra_strings() -> None:
+    """验证匹配范围包含标题与 extra 里的全部字符串值。"""
+    # 构造一条带结构化字段的记录
+    doc = make_doc("广发银行股份有限公司｜1.违反金融统计管理规定…", "http://a.cn/1.html", extra={
+        "violation_type": "1.违反金融统计管理规定; 5.违反数据安全管理规定",
+        "authority": "中国人民银行",
+        "document_url": "http://a.cn/doc.html",
+    })
+    # 取匹配文本
+    haystack = filter_haystack(doc)
+    # 标题在
+    assert "广发银行股份有限公司" in haystack
+    # extra 里的违规事实在
+    assert "违反数据安全管理规定" in haystack
+    # extra 里的机关名也在（本项目不做字段白名单——那是配置该管的事）
+    assert "中国人民银行" in haystack
+
+
+def test_filter_haystack_ignores_non_string_extra_values() -> None:
+    """验证数字等非字符串值不参与匹配。
+
+    结构化字段里可能有计数、金额这类数字。让它们参与中文关键词比较
+    没有意义，而 ``"20" in 2026`` 这类比较在类型层面就会直接报错。
+    """
+    # 构造含数字与 None 的记录
+    doc = make_doc("某通知", "http://a.cn/1.html", extra={"page": 3, "amount": None, "empty": ""})
+    # 取匹配文本
+    haystack = filter_haystack(doc)
+    # 只有标题这一行
+    assert haystack.strip() == "某通知"
+
+
+def test_filter_haystack_inserts_separator_between_fields() -> None:
+    """反向测试：不能把相邻字段首尾拼出一个原本不存在的词。
+
+    若用空串连接，``title="违反"`` + ``extra={"x": "数据安全规定"}``
+    会拼出「违反数据安全规定」——而这条记录里其实没有这个词。
+    换行符把两个字段隔开，中文关键词不含换行，因此跨字段的假命中不会成立。
+
+    这条测试的价值在于：它是一个**看起来无害的优化**（「直接 join 起来就行」）
+    被挡住的地方。
+    """
+    # 标题以「违反」结尾，extra 以「数据安全」开头
+    doc = make_doc("某银行违反", "http://a.cn/1.html", extra={"violation_type": "数据安全规定"})
+    # 取匹配文本
+    haystack = filter_haystack(doc)
+    # 各字段自身仍然可见
+    assert "违反" in haystack
+    assert "数据安全" in haystack
+    # 但跨字段拼出的词不存在
+    assert "违反数据安全" not in haystack
+
+
+def test_filter_keeps_record_matched_only_by_extra_field() -> None:
+    """验证「只有 extra 里的字段含关键词」的记录能通过过滤。
+
+    这是罚单场景的真实形态：标题被截断，「数据安全」只留在 extra 里。
+    若这条断言失败，说明过滤又退回了「只看标题」，
+    罚单数据会在检索层面整体消失，而报告显示 ok。
+    """
+    # 一条标题完全不含关键词、只有 extra 含关键词的记录
+    doc = make_doc("广发银行股份有限公司｜1.违反金融统计管理规定…", "http://a.cn/1.html", extra={
+        "violation_type": "5.违反数据安全管理规定",
+    })
+    # 只配「数据安全」这一个包含词
+    filters = {"include_keywords": ["数据安全"], "exclude_keywords": []}
+    # 过滤
+    kept, reasons = filter_docs_with_reasons([doc], filters)
+    # 必须保留
+    assert [d.url for d in kept] == ["http://a.cn/1.html"]
+    # 且不产生任何丢弃计数
+    assert reasons == {}
+
+
+def test_filter_excludes_record_matched_only_by_extra_field() -> None:
+    """验证排除规则同样作用于 extra 字段（两条规则的范围必须一致）。
+
+    若包含规则看 extra 而排除规则只看标题，就会出现一个隐蔽的不对称：
+    一份含排除词的文件仅仅因为标题里没写而侥幸留下。
+    不对称的规则比两边都窄更危险——它无法用一句话解释。
+    """
+    # 标题干净、extra 里含排除词
+    doc = make_doc("某银行行政处罚公示", "http://a.cn/1.html", extra={"violation_type": "违反反假货币业务管理规定"})
+    # 排除词只出现在 extra 里
+    filters = {"include_keywords": ["银行"], "exclude_keywords": ["反假货币"]}
+    # 过滤
+    kept, reasons = filter_docs_with_reasons([doc], filters)
+    # 应被排除
+    assert kept == []
+    # 原因记为「命中排除词」而不是「未命中包含词」
+    assert reasons == {DROP_REASON_EXCLUDED: 1}
+
+
+def test_filter_drops_extra_matched_doc_when_no_include_configured() -> None:
+    """验证「无包含词时全保留」这条规则没有被 extra 匹配破坏。
+
+    包含词为空表示「不做筛选」。此时即使某条记录的 extra 里有关键词，
+    也应原样保留——否则会引入一条「extra 里有东西就留下」的隐性规则。
+    """
+    # 一条 extra 内容丰富的记录
+    doc = make_doc("某通知", "http://a.cn/1.html", extra={"violation_type": "违反数据安全管理规定"})
+    # 只配排除词、不配包含词
+    filters = {"include_keywords": [], "exclude_keywords": ["不存在"]}
+    # 过滤
+    kept, reasons = filter_docs_with_reasons([doc], filters)
+    # 保留
+    assert [d.url for d in kept] == ["http://a.cn/1.html"]
+    # 无丢弃
+    assert reasons == {}

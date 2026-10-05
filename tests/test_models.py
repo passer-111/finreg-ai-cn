@@ -18,6 +18,7 @@ import pytest
 from finreg_ai.models import (
     AIRelevance,
     Bindingness,
+    EnforcementRecord,
     InstrumentType,
     KeyObligation,
     Policy,
@@ -27,14 +28,20 @@ from finreg_ai.models import (
     VerifiedBy,
     Version,
     admits_effective_date_unconfirmed,
+    enforcement_from_dict,
+    enforcement_to_dict,
     is_warning,
     policy_from_dict,
     policy_to_dict,
     strip_warning_prefix,
     with_location,
 )
-# 导入存储层的校验归一化函数
-from finreg_ai.store import normalize_for_validation
+# 导入存储层的校验工具与 schema 加载器
+from finreg_ai.store import (
+    load_enforcement_schema,
+    normalize_for_validation,
+    validate_against_schema,
+)
 
 
 # ============================================================
@@ -515,3 +522,327 @@ def test_policy_from_dict_raises_on_missing_required_field() -> None:
     # 应抛出 KeyError
     with pytest.raises(KeyError):
         policy_from_dict(data)
+
+
+# ============================================================
+# 执法记录（罚单）—— 语义规则与字典转换
+# ------------------------------------------------------------
+# 这一组测试的存在理由：EnforcementRecord 的字段大多是从官方公示
+# 逐字抄录的，最容易出的错不是「抄错」而是「补全」——
+# 人看到 legal_basis 空着会本能地想填上。因此每条规则都要有一条
+# 测试证明它**真的会被触发**，否则规则只是写在文档里的一句愿望。
+# ============================================================
+
+def make_enforcement(**overrides: object) -> EnforcementRecord:
+    """构造一条最小可用的 ``EnforcementRecord``，可用关键字覆盖任意字段。"""
+    # 默认值取「一切正常」的形态，便于每个测试只改动要验证的那一项
+    defaults: dict = {
+        "id": "pbc-2026-yinfa-104",                       # 标识
+        "decision_no": "银罚决字〔2026〕104号",            # 决定书文号
+        "party": "某某银行股份有限公司",                    # 当事人
+        "violation_type": "违反金融统计管理规定",           # 违规事实
+        "penalty_content": "警告，罚款100万元",            # 处罚内容
+        "authority": "中国人民银行",                       # 决定机关
+        "decision_date": "2026年9月8日",                   # 决定日期
+        "published_on": date(2026, 9, 24),                # 公示日期
+        "publicity_period": "五年",                        # 公示期限
+        "party_type": "institution",                       # 当事人类型
+        "domain": ["支付清算"],                            # 涉及领域
+        "source": SourceRef(                               # 溯源信息
+            url="https://www.pbc.gov.cn/x/index.html",     # 公示文书地址
+            site="pbc.gov.cn",                             # 站点
+            fetched_at="2026-10-05T22:31:00+08:00",        # 抓取时间
+            tier=SourceTier.PRIMARY,                       # 来源等级
+            http_status=200,                               # 状态码
+        ),
+        "last_verified": None,                             # 尚未人工核验
+        "verified_by": VerifiedBy.AUTOMATED,                # 核验方式：机器抄录
+        # automated 记录必须交代抄录范围，因此默认值里就写上——
+        # 否则每条正常记录都会产生一条警告，规则会因此被无视
+        "notes": "字段抄自官方公示原文，未逐项人工核对",      # 备注
+    }
+    # 应用覆盖项
+    defaults.update(overrides)
+    # 构造对象
+    return EnforcementRecord(**defaults)  # type: ignore[arg-type]
+
+
+def test_enforcement_clean_record_produces_no_problems() -> None:
+    """验证形态正常的罚单不产生任何问题。
+
+    这条是其余规则测试的对照物：若默认值本身就触发警告，
+    后面那些「规则 X 会触发」的断言就无法区分是规则生效还是默认值有问题。
+    """
+    # 全字段正常，应无问题
+    assert make_enforcement().validate_semantics() == []
+
+
+def test_enforcement_flags_empty_decision_no() -> None:
+    """验证文号为空时报错——文号是罚单的唯一标识。"""
+    # 清空文号
+    problems = make_enforcement(decision_no="   ").validate_semantics()
+    # 应有一条问题
+    assert len(problems) == 1
+    # 且是错误而非警告：没有文号的记录无法被引用、无法回查原文
+    assert not is_warning(problems[0])
+    # 信息里点明是哪个字段
+    assert "decision_no" in problems[0]
+
+
+def test_enforcement_flags_empty_party() -> None:
+    """验证当事人为空时报错——不知道对谁的处理，记录没有意义。"""
+    # 清空当事人
+    problems = make_enforcement(party="").validate_semantics()
+    # 应有一条错误
+    assert len(problems) == 1
+    # 是错误
+    assert not is_warning(problems[0])
+    # 字段名出现
+    assert "party" in problems[0]
+
+
+def test_enforcement_flags_empty_violation_type() -> None:
+    """验证违规事实为空时报错。
+
+    这是本类型最关键的一条规则：罚单的全部价值在于「监管实际在查什么」，
+    缺了违规事实，记录只剩下一个文号和一个金额——
+    而金额对我们的用途（校准判定规则）毫无帮助。
+    """
+    # 清空违规事实
+    problems = make_enforcement(violation_type=" ").validate_semantics()
+    # 应有一条错误
+    assert len(problems) == 1
+    # 是错误而非警告：没有违规事实的罚单在库里等于噪声
+    assert not is_warning(problems[0])
+    # 字段名出现
+    assert "violation_type" in problems[0]
+
+
+def test_enforcement_warns_when_automated_record_lacks_transcription_scope() -> None:
+    """验证机器抄录的记录未交代抄录范围时给出警告（而非错误）。
+
+    为什么是警告：一条字段正确、只是没写说明的记录仍然可用，
+    把它判为错误会逼着维护者随便补一句说明来让校验通过，
+    那反而把「说明」变成了走过场。
+    """
+    # 抹掉抄录范围说明
+    problems = make_enforcement(notes=None).validate_semantics()
+    # 应有一条问题
+    assert len(problems) == 1
+    # 且必须是警告
+    assert is_warning(problems[0])
+    # 提示里要说清该补什么
+    assert "notes" in problems[0]
+
+
+def test_enforcement_does_not_warn_about_scope_for_human_verified_record() -> None:
+    """验证人工核验过的记录不因「缺抄录说明」被警告。
+
+    反向测试：这条规则的对象是 automated。若把判断写成了
+    「notes 里没有出处就警告」而不看 verified_by，人工核过的记录
+    也会被无差别提示，规则就失去了分辨能力。
+    """
+    # 人工核验，且不写 notes
+    problems = make_enforcement(verified_by=VerifiedBy.HUMAN, notes=None).validate_semantics()
+    # 不应有任何问题
+    assert problems == []
+
+
+def test_enforcement_warns_when_tech_violation_not_classified() -> None:
+    """验证违规事实涉及技术类要求却没归类时给出警告。
+
+    这条规则的定位是**待办信号**而不是错误：归类是人工工作，
+    尚未完成是正常状态。但它必须可见，因为本类记录的价值
+    正是靠归类与关联建立起来的——未归类的记录无法参与任何聚合，
+    而未归类又不可见时，库里会攒下一批「看起来正常但查不出东西」的记录。
+    """
+    # 违规含技术类词，但 domain 空着
+    problems = make_enforcement(violation_type="违反数据安全管理规定", domain=[]).validate_semantics()
+    # 应有一条警告
+    assert len(problems) == 1
+    # 是警告
+    assert is_warning(problems[0])
+    # 点明是 domain 的问题
+    assert "domain" in problems[0]
+
+
+@pytest.mark.parametrize(
+    "violation",
+    [
+        "违反数据安全管理规定",   # 数据
+        "违反信用信息采集管理规定", # 信息
+        "违反网络安全管理规定",   # 网络
+        "违反金融科技管理规定",   # 科技
+        "违反算法推荐管理规定",   # 算法
+        "违反智能投顾管理规定",   # 智能
+        "违反信息系统管理规定",   # 技术
+    ],
+)
+def test_enforcement_tech_hint_words_all_take_effect(violation: str) -> None:
+    """逐词验证技术类关键词表确实生效，而不是只有第一个词能用。
+
+    参数化的必要性：这类关键词表最容易出的错是「写了几个词，
+    但只有前一个能让断言通过」——测试看起来覆盖了七种情况，
+    实际只验证了一种。逐词传入才能真正钉住整张表。
+    """
+    # 每条都只改违规事实，其余保持正常
+    problems = make_enforcement(violation_type=violation, domain=[]).validate_semantics()
+    # 都必须产生归类提示
+    assert len(problems) == 1, f"关键词未生效：{violation}"
+    # 且是警告
+    assert is_warning(problems[0])
+
+
+def test_enforcement_does_not_warn_when_domain_filled() -> None:
+    """验证已归类的技术类违规不再提示——否则提示会退化成噪声。"""
+    # 已归类
+    problems = make_enforcement(violation_type="违反数据安全管理规定", domain=["数据安全"]).validate_semantics()
+    # 无问题
+    assert problems == []
+
+
+def test_enforcement_warns_when_legal_basis_has_no_stated_source() -> None:
+    """验证填写了处罚依据却没说出处时给出警告。
+
+    官方公示不含处罚依据，因此这个字段一旦有值，必然是另查所得。
+    要求写明出处，是为了挡住「从违法行为类型倒推条款」这类无出处的推断——
+    它看起来很有价值，但使用者无法分辨它是抄的还是猜的。
+    """
+    # 填了依据，notes 里只有抄录范围、没有出处信息
+    problems = make_enforcement(legal_basis="《数据安全法》第 27 条").validate_semantics()
+    # 应有一条警告
+    assert len(problems) == 1
+    # 是警告
+    assert is_warning(problems[0])
+    # 点明 legal_basis
+    assert "legal_basis" in problems[0]
+
+
+@pytest.mark.parametrize(
+    "hint",
+    [
+        "依据见《数据安全法》第 27 条",   # 依据
+        "出处：人民银行官网处罚决定书",     # 出处
+        "来源为行政处罚决定书扫描件",       # 来源
+        "对应条款为《数据安全法》第 27 条", # 条款
+    ],
+)
+def test_enforcement_legal_basis_source_hints_all_accepted(hint: str) -> None:
+    """逐词验证「已交代出处」的四种说法都能被接受。
+
+    这四个词是给使用者写 notes 用的词表。若某个词其实不生效，
+    使用者按词表写好了说明却仍被警告，最可能的反应是把警告当噪声忽略，
+    而不是回来读代码——因此必须逐个验证。
+    """
+    # 填了依据并在 notes 中交代出处
+    problems = make_enforcement(
+        legal_basis="《数据安全法》第 27 条",
+        notes=f"字段抄自官方公示原文，未逐项人工核对。{hint}",
+    ).validate_semantics()
+    # 不应产生任何问题
+    assert problems == [], f"出处词未被接受：{hint}"
+
+
+def test_enforcement_legal_basis_rule_is_not_silenced_by_transcription_boilerplate() -> None:
+    """反向测试：抄录范围说明不能顶替「处罚依据的出处」。
+
+    这条测试对应一个真实撞过的坑：规则 5 原本把「原文」也算作
+    「已交代出处」的词，而 automated 记录必写的抄录范围说明
+    （「字段抄自官方公示原文，未逐项人工核对」）里天然含「原文」。
+    结果是这条规则对**每一份合规填写的记录**都不触发——
+    它从未拦住任何一条无出处的依据，但校验输出一直是「通过」。
+
+    这类「因为撞词而永不触发」的规则比没有规则更危险：
+    它让人以为这一项已经被守住了，于是没人再去人工检查。
+    因此这里显式断言「只写抄录范围说明 + 填了依据」必须产生警告。
+    """
+    # 依据填了，notes 只有抄录范围说明（含「原文」二字）
+    problems = make_enforcement(
+        legal_basis="《数据安全法》第 27 条",
+        notes="字段抄自官方公示原文，未逐项人工核对",
+    ).validate_semantics()
+    # 必须产生警告——否则规则被这行样板文字静默消音了
+    assert len(problems) == 1, "抄录范围说明把「依据出处」这条规则消音了"
+    # 且必须是关于 legal_basis 的警告
+    assert is_warning(problems[0])
+    assert "legal_basis" in problems[0]
+
+
+def test_enforcement_does_not_warn_when_legal_basis_empty() -> None:
+    """验证 legal_basis 留空不会产生任何提示。
+
+    这是本类最重要的一条「沉默」：官方公示本来就不含处罚依据，
+    因此留空是**事实的正确描述**而不是缺失。若留空被警告，
+    维护者会被推着去倒推一个条款填上——那正是本项目最想避免的事。
+    """
+    # 依据留空（默认值即如此）
+    problems = make_enforcement().validate_semantics()
+    # 无任何问题
+    assert problems == []
+    # 显式再确认一次：留空 + 已有的 notes 不构成问题
+    assert make_enforcement(legal_basis=None).validate_semantics() == []
+
+
+def test_enforcement_round_trip_preserves_verbatim_fields() -> None:
+    """验证字典转换往返后，逐字抄录的字段一字不差。
+
+    这些字段是本类记录的全部价值所在，被格式化、被解析都会造成信息损失：
+    「2026年9月8日」变成 2026-09-08 会与公示日期混同；
+    「警告，罚款100万元」被拆成数字会丢掉「警告」这个处罚种类。
+    """
+    # 构造一条记录
+    original = make_enforcement()
+    # 转字典再转回
+    restored = enforcement_from_dict(enforcement_to_dict(original))
+
+    # 文号逐字一致（含中文括号）
+    assert restored.decision_no == "银罚决字〔2026〕104号"
+    # 处罚内容逐字一致，未被拆解
+    assert restored.penalty_content == "警告，罚款100万元"
+    # 决定日期保留中文写法，未被转成 ISO
+    assert restored.decision_date == "2026年9月8日"
+    # 公示日期是 date 对象
+    assert restored.published_on == date(2026, 9, 24)
+    # 当事人类型保留
+    assert restored.party_type == "institution"
+    # 核验方式保留为枚举
+    assert restored.verified_by == VerifiedBy.AUTOMATED
+    # 来源中的状态码保留为整数而非字符串
+    assert restored.source is not None
+    assert restored.source.http_status == 200
+
+
+def test_enforcement_from_dict_raises_on_missing_required_field() -> None:
+    """验证缺少必填字段时明确报错，而不是静默取默认值。"""
+    # 构造缺 id 的字典
+    data = enforcement_to_dict(make_enforcement())
+    # 删除必填字段
+    data.pop("id")
+    # 应抛出 KeyError
+    with pytest.raises(KeyError):
+        enforcement_from_dict(data)
+
+
+def test_enforcement_schema_rejects_non_text_penalty_content() -> None:
+    """反向测试：处罚内容写成数字时必须被 schema 拦下。
+
+    「罚款1712.4万元」与「1712.4」在合规语境里不是同一条信息——
+    后者丢掉了币种、数量级和处罚种类。
+
+    这条约束放在 schema 层而不是模型层，是因为 ``_parse_text`` 的职责是
+    「把 YAML 的隐式类型差异抹平」（如把 datetime 归一成字符串），
+    它必然要接受数字；若同时要求它拒绝数字，这两个目标会互相冲突。
+    因此「必须是字符串」由 schema 声明，模型层只负责取值可解释。
+    这条测试盯住的正是这个分工——若哪天有人把 schema 里的
+    ``"type": "string"`` 放宽，它会立刻失败。
+    """
+    # 构造一份合法字典后把处罚内容改成数字
+    data = enforcement_to_dict(make_enforcement())
+    # 篡改类型
+    data["penalty_content"] = 1712.4
+    # 结构校验应报错
+    errors = validate_against_schema(data, load_enforcement_schema())
+    # 必须至少有一条错误
+    assert errors, "数字类型的处罚内容未被 schema 拦下"
+    # 且错误指向 penalty_content 这个字段
+    assert any("penalty_content" in err for err in errors)

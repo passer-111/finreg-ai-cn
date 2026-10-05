@@ -37,6 +37,7 @@ DEFAULT_ENCODING = "utf-8"
 from finreg_ai.models import (  # noqa: E402  导入需置于常量定义之后
     AIRelevance,             # AI 相关度枚举
     Bindingness,             # 约束力性质枚举
+    EnforcementRecord,       # 执法记录（罚单）模型
     InstrumentType,          # 文件效力层级枚举
     Issuer,                  # 发布机构模型
     KeyObligation,           # 关键义务模型
@@ -55,6 +56,7 @@ __all__ = [
     "DEFAULT_ENCODING",   # 默认编码常量
     "AIRelevance",        # AI 相关度
     "Bindingness",        # 约束力
+    "EnforcementRecord",  # 执法记录（罚单）
     "InstrumentType",     # 文件层级
     "Issuer",             # 发布机构
     "KeyObligation",      # 关键义务

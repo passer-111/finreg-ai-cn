@@ -35,9 +35,12 @@ from jsonschema import Draft202012Validator
 
 # 从本包导入数据模型与转换函数
 from finreg_ai.models import (
+    EnforcementRecord,
     Issuer,
     Policy,
     Source,
+    enforcement_from_dict,
+    enforcement_to_dict,
     issuer_from_dict,
     policy_from_dict,
     policy_to_dict,
@@ -49,6 +52,10 @@ from finreg_ai.models import (
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # 政策数据目录
 POLICIES_DIR = PROJECT_ROOT / "data" / "policies"
+# 执法记录目录。与 policies 平级而不是放进去，是因为两者是两种数据类型：
+# 政策回答「应该怎么做」，罚单回答「没这么做会怎样」。混在一个目录里，
+# 任何按目录遍历的脚本都会不知不觉把罚单当成政策处理。
+ENFORCEMENT_DIR = PROJECT_ROOT / "data" / "enforcement"
 # 变更流目录
 CHANGES_DIR = PROJECT_ROOT / "data" / "changes"
 # 原始快照目录（按源与日期分层存放）
@@ -102,6 +109,8 @@ def normalize_text(text: str) -> str:
 _POLICY_SCHEMA_CACHE: dict[str, Any] | None = None
 # 数据源 Schema 的缓存
 _SOURCE_SCHEMA_CACHE: dict[str, Any] | None = None
+# 执法记录 Schema 的缓存
+_ENFORCEMENT_SCHEMA_CACHE: dict[str, Any] | None = None
 
 
 def load_policy_schema() -> dict[str, Any]:
@@ -130,6 +139,20 @@ def load_source_schema() -> dict[str, Any]:
             _SOURCE_SCHEMA_CACHE = json.load(fh)
     # 返回缓存的 schema
     return _SOURCE_SCHEMA_CACHE
+
+
+def load_enforcement_schema() -> dict[str, Any]:
+    """加载并缓存执法记录 JSON Schema。"""
+    # 声明要修改模块级变量
+    global _ENFORCEMENT_SCHEMA_CACHE
+    # 首次调用时读盘
+    if _ENFORCEMENT_SCHEMA_CACHE is None:
+        # 以 UTF-8 读取
+        with open(SCHEMA_DIR / "enforcement.schema.json", encoding="utf-8") as fh:
+            # 解析 JSON 并存入缓存
+            _ENFORCEMENT_SCHEMA_CACHE = json.load(fh)
+    # 返回缓存的 schema
+    return _ENFORCEMENT_SCHEMA_CACHE
 
 
 def normalize_for_validation(value: Any) -> Any:
@@ -313,6 +336,38 @@ def save_policy(policy: Policy, directory: Path | None = None) -> Path:
     return path
 
 
+def save_enforcement(record: EnforcementRecord, directory: Path | None = None) -> Path:
+    """把执法记录对象写入 YAML 文件，返回写入路径。
+
+    与 ``save_policy`` 对称：文件名为 ``<id>.yaml``，与 id 一一对应，
+    这样从文件名就能直接推断出 id。
+
+    为什么需要一个写出函数，而不是让录入者手抄 YAML：
+    ``data/enforcement/README.md`` 描述的流程是「从变更流的 extra 抄录字段」。
+    若这一步靠手抄，字段会以肉眼不可见的方式漂移（全角括号变半角、
+    分号变逗号、空格增减），而罚单的价值恰恰建立在这些字段的逐字准确上。
+    提供写出函数，是为了让「把机器抄录的字段写进记录」这件事不需要经过
+    人的手指——人只需要做机器做不了的那部分判断。
+
+    注意本函数不校验：它只负责序列化。校验由 ``load_enforcement_file``
+    与 ``finreg validate`` 负责，写入非法数据的成本由那道闸门拦住。
+    """
+    # 未指定目录时使用默认执法记录目录
+    target = directory or ENFORCEMENT_DIR
+    # 确保目录存在
+    target.mkdir(parents=True, exist_ok=True)
+    # 计算目标路径
+    path = target / f"{record.id}.yaml"
+    # 转回字典
+    data = enforcement_to_dict(record)
+    # 写入文件；allow_unicode=True 保证中文不被转义为 \uXXXX，便于人工阅读 diff
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        # 保留键顺序（sort_keys=False），让 YAML 的字段顺序与设计一致
+        yaml.safe_dump(data, fh, allow_unicode=True, sort_keys=False, default_flow_style=False, width=120)
+    # 返回写入路径
+    return path
+
+
 # ============================================================
 # 跨记录一致性校验 —— 版本链闭合性
 # ============================================================
@@ -384,6 +439,137 @@ def validate_cross_references(policies: dict[str, Policy]) -> list[str]:
         if policy.superseded_by == pid:
             # 同上
             problems.append(f"[{pid}] superseded_by 不应指向自身")
+
+    # 返回全部问题
+    return problems
+
+
+# ============================================================
+# 执法记录读写
+# ============================================================
+
+def load_enforcement_file(path: Path) -> tuple[EnforcementRecord | None, list[str]]:
+    """加载单条执法记录 YAML 文件。
+
+    返回 ``(record, errors)`` 二元组：校验失败时 record 为 None。
+    三层校验的顺序与 ``load_policy_file`` 完全一致
+    （结构 → 模型构造 → 业务语义），这样两条数据类型的错误体验不会分叉：
+    使用者不必去记「政策记录报错格式和罚单不一样」。
+    """
+    # 准备错误收集列表
+    errors: list[str] = []
+    # 以 UTF-8 读取 YAML
+    with open(path, encoding="utf-8") as fh:
+        # safe_load 只允许基础类型，防止 YAML 标签注入执行任意代码
+        raw = yaml.safe_load(fh)
+
+    # 空文件视为错误而非跳过——静默跳过会让问题消失但没被修复
+    if raw is None:
+        # 返回明确错误
+        return None, [f"{path.name}: 文件为空或不含有效 YAML 内容"]
+
+    # 顶层必须是映射
+    if not isinstance(raw, dict):
+        # 类型错误
+        return None, [f"{path.name}: 顶层结构必须是映射（字典），实际为 {type(raw).__name__}"]
+
+    # 第一层：JSON Schema 结构校验
+    schema_errors = validate_against_schema(raw, load_enforcement_schema())
+    # 任一结构错误都直接返回，因为后续对象构造可能因此失败
+    if schema_errors:
+        # 用 with_location 附加文件名，并保持警告标记在最前
+        return None, [with_location(msg, path.name) for msg in schema_errors]
+
+    # 第二层：构造数据模型对象（此步会把日期与枚举做类型归一化）
+    try:
+        # 调用转换函数
+        record = enforcement_from_dict(raw)
+    except (KeyError, TypeError, ValueError) as exc:
+        # 转换失败说明数据形状对但取值无法解释
+        return None, [f"{path.name}: 数据模型转换失败 —— {exc}"]
+
+    # 第三层：业务语义校验
+    errors.extend(with_location(msg, path.name) for msg in record.validate_semantics())
+
+    # 有语义问题时仍返回对象，让调用方决定是硬失败还是告警
+    return record, errors
+
+
+def load_all_enforcement(
+    directory: Path | None = None,
+) -> tuple[dict[str, EnforcementRecord], list[str]]:
+    """加载目录下全部执法记录，返回 ``(id 到记录的映射, 错误列表)``。
+
+    目录不存在时返回空结果而**不报错**——这是本节与 ``load_all_policies``
+    唯一有意为之的差别。理由：``data/enforcement/`` 允许为空，
+    「目前还没有核验过的罚单」是一个合法状态；把空目录当错误，
+    会逼着维护者往里塞一条凑数的记录来让 CI 变绿，
+    这比没有记录更糟。
+    """
+    # 未指定目录时使用默认执法记录目录
+    target = directory or ENFORCEMENT_DIR
+    # 结果映射：id -> EnforcementRecord
+    records: dict[str, EnforcementRecord] = {}
+    # 错误收集
+    errors: list[str] = []
+
+    # 目录不存在：返回空集合，不报错（见上方说明）
+    if not target.exists():
+        # 空结果
+        return {}, []
+
+    # 遍历目录下所有 YAML 文件，排序保证输出稳定
+    for path in sorted(target.glob("*.yaml")):
+        # 加载单个文件
+        record, file_errors = load_enforcement_file(path)
+        # 收集错误
+        errors.extend(file_errors)
+        # 加载成功时登记
+        if record is not None:
+            # 检测 id 重复——重复 id 会让 related_policies 的引用产生歧义
+            if record.id in records:
+                # 记录冲突
+                errors.append(f"{path.name}: id 重复，与 {records[record.id].id} 冲突")
+            else:
+                # 正常登记
+                records[record.id] = record
+
+    # 返回结果
+    return records, errors
+
+
+def validate_enforcement_references(
+    records: dict[str, EnforcementRecord], policies: dict[str, Policy]
+) -> list[str]:
+    """校验执法记录里 ``related_policies`` 指向的政策确实存在。
+
+    为什么这条校验必须机械化
+    ------------------------
+    ``related_policies`` 是本类记录里最重要的字段——它把「监管实际处罚的行为」
+    与「我们从政策里提炼出的义务」连起来，知识库靠它才能反向校验义务清单。
+    但它同时是**最容易悄悄失效**的字段：政策记录被重命名 id、
+    或某条政策下架时，罚单这一侧的引用不会自动跟着改，
+    于是链接静默断裂。断链的罚单表面上和正常记录长得一模一样，
+    使用者点进去才会发现问题，而「点进去」这件事没有人会逐条做。
+
+    因此宁可在这里报错，也不让一条指向虚空的关联留在库里。
+    """
+    # 收集问题
+    problems: list[str] = []
+    # 已知政策 id 集合
+    known_ids = set(policies.keys())
+
+    # 逐条执法记录检查
+    for rid, record in records.items():
+        # 逐个引用检查
+        for target in record.related_policies:
+            # 指向了不存在的政策
+            if target not in known_ids:
+                # 报告断链，并说明这一字段的作用，便于修复者判断严重性
+                problems.append(
+                    f"[{rid}] related_policies 指向不存在的政策：{target} —— "
+                    f"该字段是罚单与义务清单之间的唯一连接，断链后这条罚单不再具备校验能力"
+                )
 
     # 返回全部问题
     return problems

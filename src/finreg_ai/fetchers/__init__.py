@@ -30,6 +30,7 @@ from finreg_ai.fetchers.csrc import CsrcFetcher      # 证监会
 from finreg_ai.fetchers.html_list import HtmlListFetcher  # 通用 HTML 列表抓取器
 from finreg_ai.fetchers.json_search_list import JsonSearchListFetcher  # 通用 JSON 接口抓取器（主力）
 from finreg_ai.fetchers.pbc import PbcFetcher        # 人民银行
+from finreg_ai.fetchers.penalty_table import PenaltyTableFetcher  # 行政处罚（详情页表格逐行还原）
 
 # 抓取器注册表：把 data/sources.yaml 中的 fetcher 字段映射到实现类。
 # 新增数据源时在此加一行即可，流水线代码无需改动。
@@ -51,6 +52,7 @@ _FETCHER_REGISTRY: dict[str, type[BaseFetcher]] = {
     "pbc": PbcFetcher,                          # 人民银行专用（table 布局 + GB 编码）
     "cac": CacFetcher,                          # 网信办专用
     "csrc": CsrcFetcher,                        # 证监会专用（在其上增加了站点自检）
+    "penalty_table": PenaltyTableFetcher,       # 行政处罚专用（列表页取文号，详情页表格逐行还原）
 }
 
 
@@ -80,6 +82,7 @@ __all__ = [
     "DROP_REASON_NOT_MATCHED",    # 丢弃原因常量：未命中包含词
     "BaseFetcher",        # 抓取器基类
     "FetchResult",        # 抓取结果
+    "PenaltyTableFetcher",  # 行政处罚抓取器
     "RawDoc",             # 原始条目
     "apply_filters",      # 关键词过滤（只返回保留结果）
     "build_fetcher",      # 工厂函数

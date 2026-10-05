@@ -23,18 +23,26 @@ from pathlib import Path
 # 导入 pytest
 import pytest
 
+# 导入 yaml 用于在临时目录里造执法记录文件
+import yaml
+
 # 导入待测的仓库层函数
 from finreg_ai.pipeline import split_issues, validate_repository
-from finreg_ai.models import policy_to_dict
+from finreg_ai.models import enforcement_from_dict, policy_to_dict
 from finreg_ai.store import (
+    ENFORCEMENT_DIR,
     POLICIES_DIR,
     SOURCES_FILE,
     compute_hash,
     find_stale_policies,
+    load_all_enforcement,
     load_all_policies,
+    load_enforcement_file,
     load_sources,
     normalize_text,
+    save_enforcement,
     validate_cross_references,
+    validate_enforcement_references,
 )
 
 # 从抓取器包导入注册表，用于校验「配置声明的 fetcher 都有实现」
@@ -64,13 +72,19 @@ def test_sources_registry_has_expected_scale() -> None:
     且网信办把不同类型的文件分列在不同栏目下（部门规章 / 规范性文件 / 政策文件），
     三栏目内容互补（分别命中 AI 专项规章、金融交叉规范、国家级 AI 产业政策），
     因此拆为三个独立源。这不是简单加数量，而是修正了一个覆盖盲区。
+
+    2026-10-05 再变更：数据源由 12 增至 13，新增人民银行「行政处罚公示」。
+    它属于**另一类数据**（执法记录，而非政策文件），默认 ``enabled: false``——
+    罚单每次数百条，进每日变更流会淹没真正的政策变化，因此按需抓取。
+    数量写死在这里的意义不只是防手滑删定义，也让人一眼看到
+    「本项目现在同时治理政策与执法两类数据」。
     """
     # 加载登记表
     issuers, sources, _errors = load_sources()
     # 当前登记了 14 个机构
     assert len(issuers) == 14
-    # 当前登记了 12 个数据源（网信办按栏目拆为 3 个）
-    assert len(sources) == 12
+    # 当前登记了 13 个数据源（网信办按栏目拆为 3 个，另有 1 个行政处罚源）
+    assert len(sources) == 13
 
 
 def test_keyword_filters_admit_known_relevant_titles() -> None:
@@ -418,3 +432,221 @@ def test_fixtures_exist(fixtures_dir: Path, fixture_name: str) -> None:
     """
     # 断言文件存在
     assert (fixtures_dir / fixture_name).exists(), f"固定装置缺失：{fixture_name}"
+
+
+# ============================================================
+# 执法记录（罚单）的加载与引用闭合
+# ------------------------------------------------------------
+# data/enforcement/ 目前是空目录，但这一层必须现在就测：
+# 它是「抓取 → 人判断 → 录入 → 关联 → 校验」这条闭环的后半段，
+# 等第一批记录进来才发现加载器有问题，代价会大得多。
+# 这里用 tmp_path 造目录，全程不碰仓库里的真实数据。
+# ============================================================
+
+def make_enforcement_data(record_id: str = "pbc-2026-yinfa-104", **overrides: object) -> dict:
+    """构造一份可直接写入 YAML 的执法记录字典。"""
+    # 默认值取「一切正常」的形态
+    data: dict = {
+        "id": record_id,                                   # 标识
+        "decision_no": "银罚决字〔2026〕104号",             # 文号
+        "party": "某某银行股份有限公司",                     # 当事人
+        "party_type": "institution",                       # 当事人类型
+        "violation_type": "违反数据安全管理规定",            # 违规事实
+        "penalty_content": "警告，罚款100万元",             # 处罚内容
+        "authority": "中国人民银行",                        # 决定机关
+        "legal_basis": None,                               # 处罚依据（官方不提供）
+        "decision_date": "2026年9月8日",                    # 决定日期
+        "published_on": "2026-09-24",                      # 公示日期
+        "publicity_period": "五年",                         # 公示期限
+        "jurisdiction": "CN",                              # 法域
+        "domain": ["数据安全"],                             # 涉及领域
+        "related_policies": [],                            # 关联政策
+        "source": {                                        # 溯源
+            "url": "https://www.pbc.gov.cn/x/index.html",
+            "site": "pbc.gov.cn",
+            "fetched_at": "2026-10-05T22:31:00+08:00",
+            "tier": "primary",
+            "http_status": 200,
+        },
+        "last_verified": None,                             # 尚未人工核验
+        "verified_by": "automated",                        # 核验方式
+        "notes": "字段抄自官方公示原文，未逐项人工核对",      # 备注
+    }
+    # 应用覆盖项
+    data.update(overrides)
+    # 返回
+    return data
+
+
+def write_enforcement_yaml(directory: Path, data: dict) -> Path:
+    """把字典写成 data/enforcement 下的 YAML 文件，返回路径。
+
+    刻意走生产代码的写出路径（``enforcement_from_dict`` → ``save_enforcement``），
+    而不是在测试里自己 ``safe_dump``：这样写入端与读取端用的是同一套字段映射，
+    一旦某一边漏了字段，往返就会暴露；测试自己造文件则会把这类缺陷掩盖掉。
+    """
+    # 先转成模型对象，再交给生产写出函数
+    return save_enforcement(enforcement_from_dict(data), directory)
+
+
+def test_enforcement_directory_is_trackable() -> None:
+    """验证 data/enforcement/ 目录存在且带有说明文件。
+
+    目录为空时 git 不会跟踪它（空目录不是版本控制的对象），
+    因此必须有一个文件把目录留住。缺了它，CI 检出后的仓库里
+    没有这个目录，任何「往这里写记录」的流程都会因为目录不存在而出错。
+    """
+    # 目录必须存在
+    assert ENFORCEMENT_DIR.is_dir(), f"执法记录目录不存在：{ENFORCEMENT_DIR}"
+    # 且必须有说明文件（README 同时承担「把空目录留住」这个职责）
+    assert (ENFORCEMENT_DIR / "README.md").is_file(), "data/enforcement/ 缺少 README.md"
+
+
+def test_load_all_enforcement_returns_empty_for_missing_directory(tmp_path: Path) -> None:
+    """验证目录不存在时返回空结果而不报错。
+
+    这是与 load_all_policies 有意为之的差别：「目前还没有核验过的罚单」
+    是一个合法状态。若把空目录当错误，维护者会被逼着往里塞一条凑数的
+    记录来让 CI 变绿——那比没有记录更糟，因为它制造了不可信的条目。
+    """
+    # 指向一个并不存在的目录
+    records, errors = load_all_enforcement(tmp_path / "not-exists")
+    # 空结果
+    assert records == {}
+    # 且没有任何错误
+    assert errors == []
+
+
+def test_load_enforcement_file_accepts_valid_record(tmp_path: Path) -> None:
+    """验证一条形态正确的记录能被加载，且逐字字段一字不差。"""
+    # 写入文件
+    path = write_enforcement_yaml(tmp_path, make_enforcement_data())
+    # 加载
+    record, errors = load_enforcement_file(path)
+    # 无错误
+    assert errors == []
+    # 记录已构造
+    assert record is not None
+    # 文号含中文括号，逐字保留
+    assert record.decision_no == "银罚决字〔2026〕104号"
+    # 决定日期保留中文写法
+    assert record.decision_date == "2026年9月8日"
+    # 公示日期被解析为 date
+    assert record.published_on == date(2026, 9, 24)
+
+
+def test_load_enforcement_file_reports_schema_violation(tmp_path: Path) -> None:
+    """验证结构错误被 schema 拦下并报到具体字段。"""
+    # id 不符合 schema 的格式要求
+    path = write_enforcement_yaml(tmp_path, make_enforcement_data(record_id="不合规的标识"))
+    # 加载
+    record, errors = load_enforcement_file(path)
+    # 记录未构造
+    assert record is None
+    # 有错误
+    assert errors
+    # 错误信息带文件名，便于定位
+    assert all(path.name in err for err in errors)
+
+
+def test_load_enforcement_file_reports_semantic_warning(tmp_path: Path) -> None:
+    """验证语义问题被报出，且仍是警告级（不会阻断）。"""
+    # 违规含技术类词但未归类，应产生归类提示
+    path = write_enforcement_yaml(tmp_path, make_enforcement_data(domain=[]))
+    # 加载
+    record, errors = load_enforcement_file(path)
+    # 记录仍然构造出来（警告不阻断）
+    assert record is not None
+    # 有一条警告
+    assert len(errors) == 1
+    # 是警告级
+    assert errors[0].startswith("[警告]")
+    # 且带上了文件名（with_location 必须把警告标记保持在最前，否则会被判为错误）
+    assert path.name in errors[0]
+
+
+def test_load_all_enforcement_detects_duplicate_ids(tmp_path: Path) -> None:
+    """验证重复 id 被拦截——重复会让 related_policies 的引用产生歧义。"""
+    # 同一 id 写两次，文件名不同
+    write_enforcement_yaml(tmp_path, make_enforcement_data())
+    # 手工再造一个同 id 的文件，文件名刻意取别的名字，
+    # 以覆盖「文件名不同但 id 相同」这种最容易漏掉的形态。
+    # 这里不能用 save_enforcement —— 它按 id 推导文件名，写出来会覆盖前一个，
+    # 而本测试要验证的恰恰是「文件名与 id 不一致时，重复 id 仍要被发现」。
+    duplicate_path = tmp_path / "another-file.yaml"
+    # 写入
+    with open(duplicate_path, "w", encoding="utf-8", newline="\n") as fh:
+        # 保留键顺序
+        yaml.safe_dump(make_enforcement_data(), fh, allow_unicode=True, sort_keys=False, default_flow_style=False, width=120)
+    # 加载整个目录
+    records, errors = load_all_enforcement(tmp_path)
+    # 只登记了一条
+    assert len(records) == 1
+    # 且报了重复
+    assert any("id 重复" in err for err in errors)
+
+
+def test_validate_enforcement_references_flags_dangling_policy_id(tmp_path: Path) -> None:
+    """反向测试：罚单引用了一条不存在的政策时必须报错。
+
+    这是本类记录里最容易被忽视的失效方式：related_policies 是本目录
+    唯一把「监管实际处罚的行为」连到「我们提炼出的义务」的字段，
+    但它同时最容易悄悄失效——政策记录被改名或下架时，
+    罚单这一侧的引用不会自动跟着改，于是链接静默断裂。
+    断链的罚单表面上和正常记录长得一模一样，只有点进去才会发现，
+    而没有人会逐条点进去。
+    """
+    # 一条指向不存在政策的罚单
+    write_enforcement_yaml(tmp_path, make_enforcement_data(related_policies=["csrc-2026-not-exist"]))
+    # 加载
+    records, errors = load_all_enforcement(tmp_path)
+    # 加载本身没问题（引用闭合是另一层校验）
+    assert errors == []
+    # 引用校验必须报错
+    problems = validate_enforcement_references(records, {})
+    # 有一条问题
+    assert len(problems) == 1
+    # 明确指出断链的目标 id
+    assert "csrc-2026-not-exist" in problems[0]
+    # 且说明后果，便于修复者判断严重性
+    assert "related_policies" in problems[0]
+
+
+def test_validate_enforcement_references_accepts_existing_policy_id(tmp_path: Path) -> None:
+    """验证引用存在的政策时不报错（反向对照）。"""
+    # 真实存在的政策
+    policies, _errors = load_all_policies(POLICIES_DIR)
+    # 取一个真实 id
+    existing_id = next(iter(policies))
+    # 构造引用它的罚单
+    write_enforcement_yaml(tmp_path, make_enforcement_data(related_policies=[existing_id]))
+    # 加载
+    records, _load_errors = load_all_enforcement(tmp_path)
+    # 引用闭合
+    assert validate_enforcement_references(records, policies) == []
+
+
+def test_validate_repository_reports_dangling_enforcement_reference(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """反向测试：finreg validate 必须真的检查执法记录这一维度。
+
+    做法：把执法记录目录指向一个临时目录，里面放一条引用不存在政策的罚单，
+    再跑一次完整校验，断言结果是**不通过**。
+
+    为什么不能只用真实的 data/enforcement/（它当前是空的）：
+    「空目录通过校验」与「这一维度根本没接上」在结果上完全一样，
+    永远无法区分。必须注入一份有问题的数据，才能证明闸门确实接上了。
+    """
+    # 造一条断链罚单
+    write_enforcement_yaml(tmp_path, make_enforcement_data(related_policies=["pbc-1999-ghost"]))
+    # 把执法记录目录指到临时目录。
+    # 这里改的是 store 模块的属性而不是某个局部变量——
+    # load_all_enforcement 在调用时从模块全局读该常量，因此替换即时生效。
+    monkeypatch.setattr("finreg_ai.store.ENFORCEMENT_DIR", tmp_path)
+    # 跑一次完整校验
+    errors, _warnings, _stale = validate_repository()
+    # 必须报错
+    assert errors, "执法记录的断链没有被 validate 拦下——这一维度可能没接上"
+    # 且错误里能看到那条断链
+    assert any("pbc-1999-ghost" in err for err in errors)
