@@ -15,12 +15,15 @@ import pytest
 
 # 导入待测函数
 from finreg_ai.fetchers.base import (
+    DROP_REASON_EXCLUDED,
+    DROP_REASON_NOT_MATCHED,
     NAV_TITLE_MAX_LEN,
     RawDoc,
     _url_path_depth,
     apply_filters,
     dedupe_by_url,
     drop_probable_navigation,
+    filter_docs_with_reasons,
 )
 
 # 人民银行规范性文件列表页的真实地址，作为「列表页层数」的比较基准
@@ -252,3 +255,174 @@ def test_apply_filters_returns_all_when_filters_is_none() -> None:
     docs = [make_doc("文件甲", "http://a.cn/1.html"), make_doc("文件乙", "http://a.cn/2.html")]
     # 无过滤配置
     assert len(apply_filters(docs, None)) == 2
+
+
+# ============================================================
+# 关键词过滤 —— 丢弃计数
+# ------------------------------------------------------------
+# 为什么这一组测试比上面那组更重要
+# --------------------------------
+# apply_filters 只回答「留下了什么」，不回答「丢掉了什么」。而本项目的
+# 头号敌人是静默丢弃：一份标题不含「人工智能」、正文却含 AI 条款的文件
+# 会被关键词规则挡掉，抓取报告依旧显示 ok，没有任何地方会提示有人被丢了。
+#
+# filter_docs_with_reasons 的存在就是为了让这种丢弃可见。因此下面除了
+# 「计数是否正确」，还专门写了一条反向测试（第 6 条），断言「看起来不相关
+# 的文件被丢弃时会被计数」——若哪天有人把计数逻辑优化掉了，那条测试会红。
+# ============================================================
+
+def test_filter_docs_with_reasons_counts_not_matched() -> None:
+    """验证「未命中包含词」的条目被单独计数。"""
+    # 一条命中包含词、两条不命中
+    docs = [
+        make_doc("关于加强人工智能应用管理的通知", "http://a.cn/1.html"),
+        make_doc("关于开展全民健身活动的通知", "http://a.cn/2.html"),
+        make_doc("关于调整办公用房面积标准的通知", "http://a.cn/3.html"),
+    ]
+    # 规则只保留含「人工智能」的
+    filters = {"include_keywords": ["人工智能"], "exclude_keywords": []}
+    # 执行过滤，拿保留结果与丢弃原因
+    kept, reasons = filter_docs_with_reasons(docs, filters)
+    # 只保留一条
+    assert len(kept) == 1
+    # 另两条计入「未命中包含词」
+    assert reasons == {DROP_REASON_NOT_MATCHED: 2}
+
+
+def test_filter_docs_with_reasons_counts_excluded() -> None:
+    """验证「命中排除词」的条目被单独计数。
+
+    与 not_matched 分开计数的价值：excluded 多说明排除词写得过宽，
+    not_matched 多说明包含词写得过窄——两者要采取的行动完全相反，
+    混在一起就失去了诊断能力。
+    """
+    # 一条命中排除词、一条命中包含词
+    docs = [
+        make_doc("关于某人工智能公司行政处罚的决定", "http://a.cn/1.html"),
+        make_doc("关于加强人工智能应用管理的通知", "http://a.cn/2.html"),
+    ]
+    # 规则：包含「人工智能」，排除「行政处罚」
+    filters = {"include_keywords": ["人工智能"], "exclude_keywords": ["行政处罚"]}
+    # 执行过滤
+    kept, reasons = filter_docs_with_reasons(docs, filters)
+    # 保留的是没被排除的那条
+    assert [d.title for d in kept] == ["关于加强人工智能应用管理的通知"]
+    # 被排除的单独计数
+    assert reasons == {DROP_REASON_EXCLUDED: 1}
+
+
+def test_filter_docs_with_reasons_reasons_sum_equals_dropped_total() -> None:
+    """验证「各原因之和 == 丢弃总数」的守恒关系。
+
+    这条不变式是上层统计的正确性基础：FetchResult.dropped_by_filter 就是
+    各原因之和，若两者能对不上，报告的丢弃数就是错的。
+    """
+    # 构造五条：一条保留、两条被排除、两条未命中
+    docs = [
+        make_doc("人工智能应用管理办法", "http://a.cn/1.html"),          # 保留
+        make_doc("人工智能公司行政处罚决定", "http://a.cn/2.html"),      # 被排除
+        make_doc("人工智能企业行政许可批复", "http://a.cn/3.html"),      # 被排除
+        make_doc("全民健身活动通知", "http://a.cn/4.html"),              # 未命中
+        make_doc("办公用房面积标准", "http://a.cn/5.html"),              # 未命中
+    ]
+    # 规则
+    filters = {"include_keywords": ["人工智能"], "exclude_keywords": ["行政处罚", "行政许可"]}
+    # 执行过滤
+    kept, reasons = filter_docs_with_reasons(docs, filters)
+    # 明细之和必须等于「输入减去保留」
+    assert sum(reasons.values()) == len(docs) - len(kept)
+    # 且明细本身符合预期
+    assert reasons == {DROP_REASON_EXCLUDED: 2, DROP_REASON_NOT_MATCHED: 2}
+
+
+def test_filter_docs_with_reasons_returns_empty_reasons_without_config() -> None:
+    """验证未配置过滤规则时不产生任何丢弃原因。
+
+    这条防止一种误报：没有任何过滤规则时却报告「丢弃了 N 条」，
+    会让人去追一个不存在的配置问题。
+    """
+    # 三条条目
+    docs = [make_doc(f"文件{i}", f"http://a.cn/{i}.html") for i in range(1, 4)]
+    # 无过滤配置
+    kept, reasons = filter_docs_with_reasons(docs, None)
+    # 全部保留
+    assert len(kept) == 3
+    # 且原因是空字典（不是 {"not_matched": 0} 这类含零值的形式）
+    assert reasons == {}
+
+
+def test_filter_docs_with_reasons_ignores_blank_keywords() -> None:
+    """验证关键词列表中的空串被忽略，不会让整源全量通过。
+
+    空串会让 ``"" in title`` 恒为真，于是「包含规则」形同不存在——
+    这是最容易被忽略的一种配置失误：YAML 里多写一个 ``-`` 或写成
+    ``- ""`` 就会触发，而且表现为「今天这条源数据特别全」，
+    比报错更难发现。
+    """
+    # 一条与关键词毫无关系的条目
+    docs = [make_doc("关于调整办公用房面积标准的通知", "http://a.cn/1.html")]
+    # 包含词里混入空串与 None，只有「人工智能」是真词
+    filters = {"include_keywords": ["", None, "人工智能"], "exclude_keywords": []}
+    # 执行过滤。这里刻意混入 None 与空串——YAML 里写成 `- ` 就是这个效果
+    kept, reasons = filter_docs_with_reasons(docs, filters)
+    # 空串没有让该条被保留
+    assert kept == []
+    # 而是照常计入了未命中
+    assert reasons == {DROP_REASON_NOT_MATCHED: 1}
+
+
+def test_filter_docs_with_reasons_makes_silent_drop_visible() -> None:
+    """反向测试：标题不含 AI 字样但可能含 AI 条款的文件被丢弃时会被计数。
+
+    这是本功能存在的唯一理由，因此必须有一条测试直接钉住它。
+    构造一份《关于数据治理的通知》——它命中包含词「数据」，会被保留；
+    再构造一份《关于加强信息科技外包管理的通知（正文含 AI 条款）》，
+    标题里没有当前包含词中的任何一个，会被丢弃。
+    断言的重点不是「它被丢了」，而是**它被丢了并且被计数**。
+    """
+    # 旧规则：只有这几个词（模拟本次扩容前的 nfra-regulations）
+    legacy_filters = {"include_keywords": ["人工智能", "智能", "算法", "模型", "数据", "科技"]}
+    # 一份标题没有 AI 字样、但属于数字金融治理的文件
+    docs = [
+        make_doc("国家金融监督管理总局发布《银行业保险业数字金融高质量发展实施方案》", "http://a.cn/1.html"),
+        make_doc("国家金融监督管理总局就《银行业保险业网络安全管理办法（征求意见稿）》公开征求意见", "http://a.cn/2.html"),
+    ]
+    # 用旧规则过滤
+    kept, reasons = filter_docs_with_reasons(docs, legacy_filters)
+    # 旧规则下两条都被丢弃
+    assert kept == []
+    # 关键断言：丢弃被记录下来了，而不是无影无踪
+    assert reasons == {DROP_REASON_NOT_MATCHED: 2}
+    # 换成扩容后的规则（新增「网络」「数字」），两条应被放行
+    widened_filters = {
+        "include_keywords": ["人工智能", "智能", "算法", "模型", "数据", "科技", "网络", "数字"]
+    }
+    # 重新过滤
+    kept2, reasons2 = filter_docs_with_reasons(docs, widened_filters)
+    # 两条都留下
+    assert len(kept2) == 2
+    # 且没有丢弃
+    assert reasons2 == {}
+
+
+def test_apply_filters_agrees_with_filter_docs_with_reasons() -> None:
+    """验证薄封装与本体不会各自演化出不同结果。
+
+    apply_filters 现在只是转调本体。保留它是为了不破坏既有调用方，
+    但两份行为一旦分叉，就会出现「测试覆盖的是旧实现、线上跑的是新实现」
+    这类最难排查的问题。这条测试把两者绑死。
+    """
+    # 混合场景：保留、被排除、未命中各若干
+    docs = [
+        make_doc("人工智能应用管理办法", "http://a.cn/1.html"),
+        make_doc("人工智能公司行政处罚决定", "http://a.cn/2.html"),
+        make_doc("全民健身活动通知", "http://a.cn/3.html"),
+    ]
+    # 规则
+    filters = {"include_keywords": ["人工智能"], "exclude_keywords": ["行政处罚"]}
+    # 两种调用方式
+    via_wrapper = apply_filters(docs, filters)
+    # 本体调用
+    via_direct, _reasons = filter_docs_with_reasons(docs, filters)
+    # 结果必须完全一致
+    assert [d.url for d in via_wrapper] == [d.url for d in via_direct]

@@ -33,7 +33,12 @@ from collections.abc import Sequence
 # 导入包版本号
 from finreg_ai import __version__
 # 从抓取器包导入日期工具
-from finreg_ai.fetchers.base import today_china
+from finreg_ai.fetchers.base import (
+    DROP_REASON_EXCLUDED,       # 关键词丢弃原因：命中排除词
+    DROP_REASON_NOT_MATCHED,    # 关键词丢弃原因：未命中包含词
+    FetchResult,                # 单个源的抓取结果，供明细渲染函数的类型标注使用
+    today_china,                # 当前北京日期
+)
 # 导入政策对象的字典化函数，用于 show --json 输出。
 # 早期这里不在模块顶部导入，而是在一个包装函数内部做局部 import，
 # 那个包装函数只是原样转调 policy_to_dict，没有任何附加逻辑——
@@ -123,6 +128,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",                       # 参数名
         action="store_true",            # 布尔开关
         help="以 JSON 格式输出报告",      # 说明
+    )
+    # 列出被关键词过滤丢弃的条目标题
+    fetch_parser.add_argument(
+        "--show-dropped",               # 参数名
+        action="store_true",            # 布尔开关
+        help="列出被关键词过滤丢弃的条目标题，用于复核「阈值是否定得太窄」",  # 说明
     )
 
     # ------------------------------------------------------------
@@ -263,6 +274,135 @@ def build_parser() -> argparse.ArgumentParser:
 # 各子命令实现
 # ============================================================
 
+# 关键词丢弃原因的中文说明，把内部原因码翻译成人能读懂的话。
+# 之所以要区分两种原因：它们的处置方向完全相反——
+# 「命中排除词」多说明排除词写得过宽（误伤真实政策），
+# 「未命中包含词」多说明包含词写得太窄（漏检 AI 相关文件）。
+_FILTER_DROP_LABELS = {
+    DROP_REASON_EXCLUDED: "命中排除词",       # 被 exclude_keywords 排除
+    DROP_REASON_NOT_MATCHED: "未命中包含词",   # 不含任何 include_keywords
+}
+
+
+def render_source_detail_lines(result: FetchResult) -> list[str]:
+    """把一个抓取结果的「处理过程明细」渲染成带树形连接符的文本行。
+
+    为什么要把这段从 ``cmd_fetch`` 里抽出来
+    --------------------------------------
+    两个原因，都不是为了好看：
+
+    1. **明细行数不固定**。导航剔除、关键词丢弃、错误说明可能同时出现，
+       也可能一个都没有；而树形连接符要求「只有最后一行用 └─」。
+       内联写法（每发现一项就 print 一次）在增删明细项时极易出现
+       两个 └─ 或一个都没有——本项目已经踩过一次。抽成函数后，
+       「先收集、后渲染」的顺序被结构固定住，不再依赖写代码时的注意力。
+    2. **可离线测试**。内联在命令函数里的输出只能通过让整条流水线
+       产出特定的 FetchResult 才能覆盖，而真实的 FetchResult 要联网。
+       抽成纯函数后，可以构造任意组合直接断言渲染结果。
+
+    明细的**内容**与**顺序**都是刻意的：
+    - 先「被剔除的导航链接」，再「被关键词滤除的条目」，最后「错误」。
+      即按「从正常处理流程到异常」排列，让读者先看到常规的清洗动作。
+    - 每一项都是「数量 + 原因」而非只给数量。只给数字无法判断
+      该采取什么行动：丢弃多到底是排除词太宽还是包含词太窄？
+    """
+    # 待打印的明细文本（尚未加连接符）
+    details: list[str] = []
+
+    # 剔除的导航链接数。这一项必须显示：清洗只要不可见就会变成
+    # 新的静默风险——某天一次改版让大量真实条目被误判为导航，
+    # 而报告依旧显示 ok，没有人会发现。
+    if result.dropped_navigation:
+        # 记录剔除数量
+        details.append(f"已剔除 {result.dropped_navigation} 条疑似栏目导航链接")
+
+    # 关键词过滤丢弃数。与导航剔除同属静默风险：标题不含 AI 字样、
+    # 正文却含 AI 条款的文件会被滤掉，若不显示则完全无迹可查。
+    if result.dropped_by_filter:
+        # 把原因码翻译成中文，并按原因名排序保证输出稳定
+        # （字典序在 Python 中是确定的，因此同一份数据每次输出一致，
+        #   测试才能断言具体文本，而不会随哈希种子漂移）
+        reason_text = "、".join(
+            f"{_FILTER_DROP_LABELS.get(reason, reason)} {count} 条"
+            for reason, count in sorted(result.filter_drop_reasons.items())
+        )
+        # 组装说明
+        detail = f"已滤除 {result.dropped_by_filter} 条未进入结果的关键词过滤丢弃"
+        # 仅有明细时补充原因细分
+        if reason_text:
+            # 附上原因细分
+            detail += f"（{reason_text}）"
+        # 收集
+        details.append(detail)
+
+    # 错误说明。放在最后：它是异常，不是常规清洗动作。
+    if result.error:
+        # 收集
+        details.append(result.error)
+
+    # 渲染：最后一行用 └─ 收尾，其余用 ├─
+    lines: list[str] = []
+    # 逐行加连接符与缩进
+    for index, text in enumerate(details):
+        # 判断是否为最后一行
+        branch = "└─" if index == len(details) - 1 else "├─"
+        # 缩进对齐到源名下方
+        lines.append(f"           {branch} {text}")
+    # 返回渲染结果
+    return lines
+
+
+# 单次 --show-dropped 输出中，单个源最多列出的丢弃条目数。
+#
+# 为什么要设上限：实测 nfra-regulations 一次丢弃 151 条，
+# 无上限地把它们全打出来会淹没同一次输出里的其他源——
+# 而其他源正因为「丢弃少」才更需要被看见。
+# 截断时必须明确写出「还有 N 条未列出」，绝不能不声不响地少打几行：
+# 那正是本项目一直在对抗的「静默」。
+DROPPED_DOCS_LIMIT = 40
+
+
+def render_dropped_docs(result: FetchResult, limit: int = DROPPED_DOCS_LIMIT) -> list[str]:
+    """把被关键词过滤丢弃的条目渲染成可打印的文本行。
+
+    为什么这件事必须能做
+    --------------------
+    ``已滤除 151 条`` 是一个**无法行动**的数字。维护者看到它，既不知道
+    被丢的是《银行业保险业数字金融高质量发展实施方案》还是某场表彰大会的
+    新闻稿，也就无从判断该不该改关键词。要复核「阈值是不是定得太窄」，
+    唯一的办法就是能把被丢弃的标题拿出来逐条看。
+
+    本函数只做渲染，不做判断——它不猜哪些「看起来重要」。
+    原因：一旦在这里加入自己的相关性判断，就成了第二个关键词过滤器，
+    而它的判断依据会比配置里的关键词更不可见。保持它「如实呈现」。
+    """
+    # 没有任何丢弃时输出为空，不打印标题行
+    if not result.dropped_filter_docs:
+        # 返回空列表
+        return []
+
+    # 输出行
+    lines: list[str] = []
+    # 标题行：说明这是复核用途，并给出总数
+    lines.append(f"           ┄ 以下为被滤除的条目（共 {len(result.dropped_filter_docs)} 条，供复核）：")
+    # 取前 limit 条
+    shown = result.dropped_filter_docs[:limit]
+    # 逐条输出
+    for doc in shown:
+        # 日期缺失时用占位符，避免输出 None
+        date_text = doc.published_on.isoformat() if doc.published_on else "无日期"
+        # 组装一行
+        lines.append(f"             · [{date_text}] {doc.title}")
+    # 被截断时明确说明还剩多少条，绝不静默少打
+    if len(result.dropped_filter_docs) > limit:
+        # 计算剩余数量
+        remaining = len(result.dropped_filter_docs) - limit
+        # 追加说明
+        lines.append(f"             …… 另有 {remaining} 条未列出（上限 {limit} 条）")
+    # 返回渲染结果
+    return lines
+
+
 def cmd_fetch(args: argparse.Namespace) -> int:
     """执行 fetch 子命令。"""
     # 执行流水线
@@ -289,16 +429,22 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             )
             # 输出一行
             print(f"  {marker:<8} {result.source_id:<24} 条目数={len(result.docs)}")
-            # 有被剔除的导航链接时单独标注。
-            # 这一项必须显示：清洗只要不可见就会变成新的静默风险——
-            # 某天一次改版让大量真实条目被误判为导航，而报告依旧显示 ok。
-            if result.dropped_navigation:
-                # 打印剔除数量
-                print(f"           ├─ 已剔除 {result.dropped_navigation} 条疑似栏目导航链接")
-            # 有错误信息时缩进打印
-            if result.error:
-                # 打印错误说明
-                print(f"           └─ {result.error}")
+
+            # 输出本源的处理过程明细（导航剔除 / 关键词丢弃 / 错误说明）。
+            # 明细的组装与树形连接符的渲染都在 render_source_detail_lines 里，
+            # 那里说明了「为什么先收集再打印」以及为什么这段必须是可测的纯函数。
+            for line in render_source_detail_lines(result):
+                # 逐行输出
+                print(line)
+
+            # 需要复核丢弃内容时，把被滤掉的标题逐条列出来。
+            # 默认不列：151 条标题会把报告淹没，日常抓取只需看到计数；
+            # 但一旦决定复核「关键词是不是定窄了」，就必须能看到具体丢了什么。
+            if args.show_dropped:
+                # 渲染并逐行输出
+                for line in render_dropped_docs(result):
+                    # 输出
+                    print(line)
 
         # 打印概要
         print()

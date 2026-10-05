@@ -73,6 +73,69 @@ def test_sources_registry_has_expected_scale() -> None:
     assert len(sources) == 12
 
 
+def test_keyword_filters_admit_known_relevant_titles() -> None:
+    """钉住几条「曾经被漏检、修好后必须继续命中」的真实标题。
+
+    为什么需要这条测试
+    ------------------
+    关键词过滤是本项目最难察觉的一处覆盖缺口：它丢条目时不报错、
+    流水线仍显示 `ok`，因此「关键词定窄了」这件事可以长期无人知晓。
+    2026-10-05 补上丢弃计数后立刻发现两个真实漏检，各自靠加一个词修好。
+
+    但「加一个词」是个脆弱状态——后来的人看到关键词表里有个孤零零的
+    「网络」，很可能觉得与「人工智能」主题不搭而顺手删掉，
+    这一删就是又一次静默漏检，且没有任何测试会红。
+
+    因此这里把「哪条政策必须被哪个源放行」直接写死成断言。
+    它不是重复实现过滤逻辑，而是一份**覆盖要求的清单**：
+    只要这些标题仍应属于知识库，对应的关键词就不许删。
+
+    维护方式：若某条政策经复核确认不属于本项目范围，
+    应连同说明一起从下表删除，而不是只删关键词。
+    """
+    # 加载全部源
+    _issuers, sources, _errors = load_sources()
+    # 清单：(源 id, 必须被放行的标题, 为什么它属于本项目)
+    required = [
+        (
+            "nfra-regulations",
+            "国家金融监督管理总局就《银行业保险业网络安全管理办法（征求意见稿）》公开征求意见",
+            "银行业网络安全管理办法，是 AI 系统在该行业落地必须遵守的配套规章",
+        ),
+        (
+            "nfra-regulations",
+            "中国人民银行 工业和信息化部市场监管总局 金融监管总局 中国证监会 国家知识产权局 国家网信办 国家外汇局有关负责人就《金融产品网络营销管理办法》答记者问",
+            "本项目的金融×AI 交叉点条目，曾被长期漏检",
+        ),
+        (
+            "nfra-regulations",
+            "国家金融监督管理总局发布《银行业保险业数字金融高质量发展实施方案》",
+            "数字金融行业级纲领，「数字化」不含「数据」，旧词表匹配不上",
+        ),
+        (
+            "csrc-regulations",
+            "【第218号令】《证券期货业网络和信息安全管理办法》",
+            "证券期货业网络与信息安全配套规章，与银行业那部同构",
+        ),
+    ]
+    # 逐条验证
+    for source_id, title, reason in required:
+        # 取该源的包含关键词与排除关键词
+        filters = sources[source_id].filters or {}
+        # 提取包含词
+        include = [k for k in (filters.get("include_keywords") or []) if k]
+        # 提取排除词
+        exclude = [k for k in (filters.get("exclude_keywords") or []) if k]
+        # 不应被任何排除词挡下
+        assert not any(word in title for word in exclude), (
+            f"[{source_id}] 标题被排除词挡下：{title}（{reason}）"
+        )
+        # 必须命中至少一个包含词
+        assert any(word in title for word in include), (
+            f"[{source_id}] 标题不含任何包含词，将被静默丢弃：{title}（{reason}）"
+        )
+
+
 def test_every_source_fetcher_is_registered() -> None:
     """验证每个数据源声明的抓取器类型都有对应实现。
 

@@ -176,6 +176,100 @@ def test_json_fetcher_renders_detail_url_from_doc_id() -> None:
     assert result.docs[0].url == "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=900001"
 
 
+# ============================================================
+# 关键词过滤的丢弃明细 —— 「计数」之外还要留下「被丢的是谁」
+# ------------------------------------------------------------
+# 固定装置里有三条：两条含「人工智能」，一条是
+# 《关于某年度银行业保险业主要监管指标数据情况的通报》。
+# 这恰好能同时构造出「命中包含词」「未命中包含词」「命中排除词」三种命运，
+# 不需要另造装置。
+# ============================================================
+
+def test_fetch_leaves_no_dropped_docs_when_no_filters_configured() -> None:
+    """验证未配置过滤规则时，丢弃明细为空。
+
+    防止一种误报：没有任何过滤却报告「丢弃了 N 条」，
+    会让人去追一个不存在的配置问题。
+    """
+    # 显式不给 filters
+    source = make_json_source(filters=None)
+    # 抓取
+    result = JsonSearchListFetcher(source, session=FakeSession(_nfra_router)).fetch()
+    # 三条全部保留
+    assert len(result.docs) == 3
+    # 无丢弃
+    assert result.dropped_by_filter == 0
+    # 丢弃明细也应为空
+    assert result.dropped_filter_docs == []
+
+
+def test_fetch_dropped_docs_length_matches_dropped_count() -> None:
+    """验证「丢弃明细条数 == 丢弃计数」这条不变式。
+
+    两者一旦能对不上，就说明差集算法有问题（例如漏掉了 URL 重复的情况），
+    而那种缺陷的表现恰好是「报告了数量但列不出对应条目」——
+    看起来一切正常，复核时才发现少了东西。因此必须用不变式钉住。
+    """
+    # 只保留含「人工智能」的条目
+    source = make_json_source(filters={"include_keywords": ["人工智能"], "exclude_keywords": []})
+    # 抓取
+    result = JsonSearchListFetcher(source, session=FakeSession(_nfra_router)).fetch()
+    # 三条里保留两条
+    assert len(result.docs) == 2
+    # 丢弃一条
+    assert result.dropped_by_filter == 1
+    # 明细条数必须与计数一致
+    assert len(result.dropped_filter_docs) == result.dropped_by_filter
+    # 而且丢掉的正是那条不相关的监管指标通报
+    assert "监管指标" in result.dropped_filter_docs[0].title
+
+
+def test_fetch_dropped_docs_distinguishes_excluded_from_not_matched() -> None:
+    """验证同一批条目按不同原因被丢弃时，明细与原因计数能对上。
+
+    固定装置里那条「监管指标数据情况通报」恰好同时：
+    - 不含「人工智能」→ 本会因未命中被丢
+    - 含「监管指标」→ 也会因命中排除词被丢
+    排除规则优先，因此原因是 excluded 而不是 not_matched。
+    这条测试正是要钉住这个优先级在**明细层面**也成立。
+    """
+    # 包含「人工智能」，排除「监管指标」
+    source = make_json_source(
+        filters={"include_keywords": ["人工智能"], "exclude_keywords": ["监管指标"]}
+    )
+    # 抓取
+    result = JsonSearchListFetcher(source, session=FakeSession(_nfra_router)).fetch()
+    # 保留两条
+    assert len(result.docs) == 2
+    # 原因是「命中排除词」而非「未命中包含词」
+    assert result.filter_drop_reasons == {"excluded": 1}
+    # 明细里那一条正是监管指标通报
+    assert len(result.dropped_filter_docs) == 1
+    # 标题匹配
+    assert "监管指标" in result.dropped_filter_docs[0].title
+
+
+def test_fetch_exposes_dropped_docs_even_when_status_is_ok() -> None:
+    """反向测试：状态为 ok 且仍有条目时，丢弃明细照样必须留存。
+
+    这是最容易被「优化」掉的一条：既然抓到了东西，何必再留着被丢掉的？
+    但实测 nfra-regulations 每次保留 5 条、丢弃 155 条、状态完全正常——
+    若不留下明细，这 155 条里可能含有的重要政策永远无人有机会发现。
+    """
+    # 只保留含「人工智能」的
+    source = make_json_source(filters={"include_keywords": ["人工智能"]})
+    # 抓取
+    result = JsonSearchListFetcher(source, session=FakeSession(_nfra_router)).fetch()
+    # 状态正常
+    assert result.status == "ok"
+    # 且确实抓到了条目
+    assert result.docs
+    # 但被丢弃的条目依然留在了结果里
+    assert result.dropped_filter_docs
+    # 每一条都有标题可供复核
+    assert all(d.title for d in result.dropped_filter_docs)
+
+
 def test_json_fetcher_drops_rows_when_template_field_missing() -> None:
     """验证模板所需字段缺失时该条被丢弃，而不是生成残缺链接。"""
     # 把模板改成一个装置中不存在的字段

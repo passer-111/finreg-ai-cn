@@ -14,11 +14,21 @@
 # 导入 json 用于解析 JSON 输出
 import json
 
+# 导入 date 类型，用于构造带日期的被丢弃条目
+from datetime import date
+
 # 导入 pytest
 import pytest
 
 # 导入 CLI 入口与退出码常量
-from finreg_ai.cli import EXIT_ISSUES, EXIT_OK, main
+from finreg_ai.cli import EXIT_ISSUES, EXIT_OK, main, render_dropped_docs, render_source_detail_lines
+# 导入抓取结果与条目模型，用于构造明细渲染的输入
+from finreg_ai.fetchers.base import (
+    DROP_REASON_EXCLUDED,
+    DROP_REASON_NOT_MATCHED,
+    FetchResult,
+    RawDoc,
+)
 # 导入数据加载函数以便动态取得一条真实记录 id
 from finreg_ai.store import load_all_policies
 
@@ -385,3 +395,229 @@ def test_fetch_json_report_contains_summary(capsys: pytest.CaptureFixture[str]) 
     assert "failed_sources" in payload["summary"]
     # 应含各源明细
     assert isinstance(payload["fetch_results"], list)
+
+
+# ============================================================
+# fetch —— 各源处理过程明细的渲染
+# ------------------------------------------------------------
+# 为什么这组渲染要单独测
+# ----------------------
+# 明细行数不固定，树形连接符却要求「只有最后一行用 └─」。
+# 内联写法下增删一项明细就可能出现两个 └─ 或一个都没有，
+# 而这种错误在真实抓取（多数源什么明细都没有）里长期不可见。
+# 抽成纯函数后可以构造任意组合直接断言，不依赖网络也不依赖运气。
+# ============================================================
+
+def make_fetch_result(**overrides: object) -> FetchResult:
+    """构造测试用 ``FetchResult``，默认是一个「干净」的成功结果。"""
+    # 默认值：成功、有 3 条条目、无任何丢弃、无错误
+    defaults: dict = {
+        "source_id": "test-source",
+        "status": "ok",
+        "docs": [RawDoc(title=f"文件{i}", url=f"http://a.cn/{i}.html", source_id="test-source") for i in range(1, 4)],
+    }
+    # 应用覆盖项
+    defaults.update(overrides)
+    # 构造并返回
+    return FetchResult(**defaults)
+
+
+def test_render_source_detail_lines_empty_when_nothing_to_report() -> None:
+    """验证没有可报之事时不产生任何明细行。
+
+    这条防止「每次抓取都打印一行 `已滤除 0 条`」这类噪声——
+    噪声会让人开始忽略这一区域，于是真正异常的那一次也没人看。
+    """
+    # 干净的成功结果
+    result = make_fetch_result()
+    # 不应有任何明细行
+    assert render_source_detail_lines(result) == []
+
+
+def test_render_source_detail_lines_all_branches_use_correct_connector() -> None:
+    """验证多个明细项时，只有最后一行用 └─。
+
+    这是本项目真实踩过的坑：早期内联写法里「错误说明」和「导航剔除」
+    各自独立判断是否最后一行，结果两条都用 └─，树形结构失真。
+    明面上只是显示问题，实际会让人误以为输出被截断。
+
+    注意原因细分（命中排除词 N 条）是**嵌在丢弃行括号里**的，
+    不单独占一行——因此三种明细对应三行，不是四行。
+    """
+    # 三种明细同时出现
+    result = make_fetch_result(
+        dropped_navigation=5,                                   # 导航剔除
+        dropped_by_filter=155,                                  # 关键词丢弃
+        filter_drop_reasons={DROP_REASON_NOT_MATCHED: 147,
+                             DROP_REASON_EXCLUDED: 8},          # 丢弃原因细分（并入上一行）
+        error="示例错误说明",                                     # 错误
+    )
+    # 渲染
+    lines = render_source_detail_lines(result)
+    # 共三行：导航剔除、关键词丢弃、错误
+    assert len(lines) == 3
+    # 第一行用 ├─
+    assert lines[0].strip().startswith("├─")
+    # 第二行同理
+    assert lines[1].strip().startswith("├─")
+    # 只有最后一行用 └─
+    assert lines[2].strip().startswith("└─")
+    # 全文只有一个 └─，用计数断言比逐行断言更难被绕过
+    assert sum(line.count("└─") for line in lines) == 1
+
+
+def test_render_source_detail_lines_shows_filter_drop_with_reason_labels() -> None:
+    """验证关键词丢弃行含总数与中文原因细分。
+
+    断言的是「人能看到什么」，而不是内部实现：
+    运维需要从这一行判断该调排除词还是包含词，因此原因必须可读。
+    """
+    # 只发生关键词丢弃
+    result = make_fetch_result(
+        dropped_by_filter=155,
+        filter_drop_reasons={DROP_REASON_EXCLUDED: 8, DROP_REASON_NOT_MATCHED: 147},
+    )
+    # 渲染
+    lines = render_source_detail_lines(result)
+    # 只有一行
+    assert len(lines) == 1
+    # 该行以 └─ 结尾行收束（惟一项）
+    assert lines[0].strip().startswith("└─")
+    # 含丢弃总数
+    assert "155" in lines[0]
+    # 含两种原因的中文说明
+    assert "命中排除词 8 条" in lines[0]
+    # 含另一种原因
+    assert "未命中包含词 147 条" in lines[0]
+
+
+def test_render_source_detail_lines_surfaces_drop_even_when_status_is_ok() -> None:
+    """反向测试：状态为 ok 且仍有条目时，丢弃数照样必须显示。
+
+    这是整个功能的核心场景，也是最容易被「优化」掉的场景——
+    有人会觉得「既然抓到东西了就别报杂音」。但实测中 nfra-regulations
+    每次保留 5 条、丢弃 155 条，状态完全正常；若不显示丢弃数，
+    这 155 条里可能含有的重要政策永远无人知晓。
+    """
+    # 状态 ok、保留 5 条、同时丢弃 155 条 —— 完全照搬实测场景
+    result = make_fetch_result(
+        status="ok",
+        docs=[RawDoc(title=f"保留{i}", url=f"http://a.cn/keep{i}.html", source_id="test-source") for i in range(1, 6)],
+        dropped_by_filter=155,
+        filter_drop_reasons={DROP_REASON_NOT_MATCHED: 147, DROP_REASON_EXCLUDED: 8},
+    )
+    # 渲染
+    lines = render_source_detail_lines(result)
+    # 必须出现一行丢弃说明
+    assert len(lines) == 1
+    # 且明确写出丢弃总数
+    assert "155" in lines[0]
+
+
+def test_render_source_detail_lines_orders_normal_cleaning_before_error() -> None:
+    """验证明细顺序为「导航剔除 → 关键词丢弃 → 错误」。
+
+    顺序是有意义的：正常清洗动作在前、异常在后，读者才能一眼看出
+    这份报告里「哪些是设计中的过滤，哪些是出了事」。
+    """
+    # 三种明细同时出现
+    result = make_fetch_result(
+        dropped_navigation=5,
+        dropped_by_filter=10,
+        filter_drop_reasons={DROP_REASON_NOT_MATCHED: 10},
+        error="连接超时",
+    )
+    # 渲染
+    lines = render_source_detail_lines(result)
+    # 导航剔除在前
+    assert "导航" in lines[0]
+    # 关键词丢弃在中
+    assert "关键词" in lines[1]
+    # 错误在最后
+    assert "连接超时" in lines[2]
+
+
+# ============================================================
+# fetch —— 被丢弃条目明细的渲染（--show-dropped）
+# ============================================================
+
+def test_render_dropped_docs_empty_when_nothing_dropped() -> None:
+    """验证没有丢弃条目时不产生任何输出行。"""
+    # 干净结果
+    result = make_fetch_result()
+    # 不应输出任何内容
+    assert render_dropped_docs(result) == []
+
+
+def test_render_dropped_docs_lists_titles_with_dates() -> None:
+    """验证被丢弃条目按「日期 + 标题」逐条列出。"""
+    # 两条被丢弃的条目，其中一条无日期
+    result = make_fetch_result(
+        dropped_filter_docs=[
+            RawDoc(title="银行业保险业数字金融高质量发展实施方案",
+                   url="http://a.cn/1.html", source_id="test-source",
+                   published_on=date(2025, 12, 26)),
+            RawDoc(title="某场表彰大会新闻稿",
+                   url="http://a.cn/2.html", source_id="test-source"),
+        ]
+    )
+    # 渲染
+    lines = render_dropped_docs(result)
+    # 首行是说明行 + 两条明细 = 三行
+    assert len(lines) == 3
+    # 说明行给出总数
+    assert "共 2 条" in lines[0]
+    # 第一条带日期
+    assert "[2025-12-26]" in lines[1]
+    # 且带标题
+    assert "数字金融高质量发展实施方案" in lines[1]
+    # 第二条日期缺失时用占位符而不是 None
+    assert "[无日期]" in lines[2]
+    # 标题照常显示
+    assert "表彰大会" in lines[2]
+
+
+def test_render_dropped_docs_truncates_with_explicit_remainder() -> None:
+    """反向测试：超过上限时必须明确写出还剩多少条，不得静默少打。
+
+    这是本项目对「静默」的一贯立场在展示层的延续：宁可多打一行
+    「另有 N 条未列出」，也不能让人误以为已经看到了全部。
+    若哪天有人为了输出干净而删掉那一行，这条测试会红。
+    """
+    # 构造 5 条，上限设为 2
+    docs = [
+        RawDoc(title=f"被丢弃的条目{i}", url=f"http://a.cn/{i}.html", source_id="test-source")
+        for i in range(1, 6)
+    ]
+    # 传入自定义上限
+    result = make_fetch_result(dropped_filter_docs=docs)
+    # 渲染
+    lines = render_dropped_docs(result, limit=2)
+    # 说明行 + 2 条明细 + 1 行剩余说明 = 4 行
+    assert len(lines) == 4
+    # 最后一行必须说明剩余数量
+    assert "另有 3 条未列出" in lines[-1]
+    # 且说明行里的总数仍是全量 5，而不是被截断后的 2
+    assert "共 5 条" in lines[0]
+
+
+def test_render_dropped_docs_does_not_hide_anything_within_limit() -> None:
+    """验证未超上限时不出现「另有」之类的多余说明。
+
+    与上一条配对：上一条保证「该说的不能说漏」，
+    这一条保证「不该说的别乱说」——没有截断却提示被截断，
+    会让人以为输出不完整而反复重跑。
+    """
+    # 两条，上限 40（默认值）
+    result = make_fetch_result(
+        dropped_filter_docs=[
+            RawDoc(title=f"条目{i}", url=f"http://a.cn/{i}.html", source_id="test-source")
+            for i in range(1, 3)
+        ]
+    )
+    # 渲染
+    lines = render_dropped_docs(result)
+    # 说明行 + 两条
+    assert len(lines) == 3
+    # 不应出现截断提示
+    assert not any("另有" in line for line in lines)

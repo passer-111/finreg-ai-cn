@@ -13,7 +13,17 @@
 from finreg_ai.models import Source
 
 # 导入基类与公共数据结构，一并对外导出
-from finreg_ai.fetchers.base import BaseFetcher, FetchResult, RawDoc, apply_filters, now_china_iso, today_china
+from finreg_ai.fetchers.base import (
+    DROP_REASON_EXCLUDED,           # 丢弃原因：命中排除词
+    DROP_REASON_NOT_MATCHED,        # 丢弃原因：未命中包含词
+    BaseFetcher,                    # 抓取器基类
+    FetchResult,                    # 抓取结果
+    RawDoc,                         # 原始条目
+    apply_filters,                  # 关键词过滤（只返回保留结果）
+    filter_docs_with_reasons,       # 关键词过滤（附带丢弃原因计数）
+    now_china_iso,                  # 当前北京时间 ISO 字符串
+    today_china,                    # 当前北京日期
+)
 # 导入各专用抓取器
 from finreg_ai.fetchers.cac import CacFetcher        # 网信办
 from finreg_ai.fetchers.csrc import CsrcFetcher      # 证监会
@@ -66,11 +76,14 @@ def build_fetcher(source: Source) -> BaseFetcher:
 
 # 显式列出对外公开的符号
 __all__ = [
+    "DROP_REASON_EXCLUDED",       # 丢弃原因常量：命中排除词
+    "DROP_REASON_NOT_MATCHED",    # 丢弃原因常量：未命中包含词
     "BaseFetcher",        # 抓取器基类
     "FetchResult",        # 抓取结果
     "RawDoc",             # 原始条目
-    "apply_filters",      # 关键词过滤
+    "apply_filters",      # 关键词过滤（只返回保留结果）
     "build_fetcher",      # 工厂函数
+    "filter_docs_with_reasons",  # 关键词过滤（附带丢弃原因计数）
     "now_china_iso",      # 当前北京时间 ISO 字符串
     "today_china",        # 当前北京日期
 ]

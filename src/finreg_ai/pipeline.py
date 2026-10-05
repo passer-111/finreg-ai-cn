@@ -119,6 +119,26 @@ class PipelineReport:
                     "status": r.status,                         # 状态
                     "doc_count": len(r.docs),                   # 条目数
                     "dropped_navigation": r.dropped_navigation,  # 剔除的疑似导航链接数
+                    # 关键词过滤丢弃数及其原因明细。必须暴露：一个源可能每天都在
+                    # 丢掉若干条，而报告只显示 ok——把数字摆出来才能发现问题。
+                    "dropped_by_filter": r.dropped_by_filter,        # 关键词过滤丢弃数
+                    "filter_drop_reasons": r.filter_drop_reasons,    # 丢弃原因明细
+                    # 被丢弃的条目本身（标题/链接/日期）。只有计数是无法行动的：
+                    # 报告说「丢了 151 条」，维护者仍不知道该不该改关键词，
+                    # 除非能看到丢掉的到底是哪 151 条。
+                    #
+                    # 为什么不放进公开的变更文件（data/changes/）而只放在报告里：
+                    # 变更文件是面向使用者的数据产物，记录「有什么变化」；
+                    # 这里是抓取期的诊断信息，记录「流水线做过什么取舍」。
+                    # 把后者塞进前者，会让公开产物里混进大量与政策无关的标题。
+                    "dropped_filter_docs": [
+                        {
+                            "title": d.title,                                    # 标题
+                            "url": d.url,                                        # 详情页链接
+                            "published_on": d.published_on.isoformat() if d.published_on else None,  # 发布日期
+                        }
+                        for d in r.dropped_filter_docs                          # 逐条序列化
+                    ],
                     "error": r.error,                           # 错误说明
                     "request_count": r.request_count,           # 请求次数
                     "fetched_at": r.fetched_at,                 # 抓取时间

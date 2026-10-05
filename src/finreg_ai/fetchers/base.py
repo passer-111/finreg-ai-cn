@@ -151,6 +151,32 @@ class FetchResult:
     # 大量真实条目被误判为导航，而报告依旧显示 ok，没有人会发现。
     # 把剔除数量打印出来，运维看到异常大的数字就能立刻警觉。
     dropped_navigation: int = 0
+    # 被关键词过滤丢弃的条目总数。
+    #
+    # 与 dropped_navigation 是同一类问题的两个面：导航剔除会误杀「无日期但标题长」
+    # 的条目，关键词过滤则会误杀「标题不含 AI 字样但正文含 AI 条款」的文件。
+    # 两者都必须可见，否则误杀都是静默的。
+    #
+    # 实测背景：2026-10-05 复核时发现关键词过滤的丢弃数此前完全未被记录——
+    # 一个源可能每天都在丢十几条，而报告始终显示 ok。
+    dropped_by_filter: int = 0
+    # 关键词丢弃的原因细分，形如 {"excluded": 2, "not_matched": 12}。
+    #
+    # 为什么要细分：两种原因要采取的行动完全相反——excluded 多说明排除词
+    # 写得太宽（误伤真实政策），not_matched 多说明包含词写得太窄（漏检）。
+    # 只看一个总数无法判断该调哪一边。
+    filter_drop_reasons: dict[str, int] = field(default_factory=dict)
+    # 被关键词过滤丢弃的**条目本身**，供人工复核。
+    #
+    # 为什么光有计数不够：`已滤除 151 条` 是一个无法行动的数字——
+    # 维护者看到它，既不知道被丢的是《银行业保险业数字金融高质量发展
+    # 实施方案》还是某场表彰大会的新闻稿，也就无从判断该不该改关键词。
+    # 把条目留下来，「可疑的没有被丢」这件事才可被检查。
+    #
+    # 内存代价：RawDoc 只含标题、链接、日期等短字段
+    # （raw_html 字段在本项目中从未被任何抓取器赋值），
+    # 每个源留几条到上百条都在可忽略量级。
+    dropped_filter_docs: list[RawDoc] = field(default_factory=list)
 
     @property
     def is_usable(self) -> bool:
@@ -359,8 +385,23 @@ class BaseFetcher(abc.ABC):
         # 记录剔除数量，供上层在报告中显示
         dropped_nav = len(deduped) - len(cleaned)
 
-        # 第 3 步：应用关键词过滤
-        filtered = apply_filters(cleaned, self.source.filters)
+        # 第 3 步：应用关键词过滤，并记录丢弃原因计数。
+        # 这里用 filter_docs_with_reasons 而非 apply_filters——后者只返回保留结果，
+        # 会让「标题不含 AI 字样、正文却含 AI 条款」的文件被静默丢掉且无迹可查。
+        filtered, filter_reasons = filter_docs_with_reasons(cleaned, self.source.filters)
+        # 丢弃总数取各原因之和，保证与原因明细始终一致
+        dropped_filter = sum(filter_reasons.values())
+
+        # 把被丢弃的条目本身也留下来，供人工复核。
+        #
+        # 这里用「URL 差集」而不是让 filter_docs_with_reasons 一并返回，
+        # 是为了让该函数的返回值保持稳定（两个元素），不因新增展示需求而改签名。
+        # 差集在此处是精确的：cleaned 已经过 dedupe_by_url 去重，URL 唯一；
+        # 且 filtered 必然是 cleaned 的子序列。二者相减不会多也不会少。
+        # 「被丢弃的条目数 == dropped_by_filter」这条不变式由测试钉住。
+        kept_urls = {doc.url for doc in filtered}
+        # 保序输出：按 cleaned 的原始顺序（即列表页顺序，通常由新到旧）
+        dropped_docs = [doc for doc in cleaned if doc.url not in kept_urls]
 
         # 判断结果状态：解析到条目为 ok，未解析到条目为 degraded
         # 这里刻意不把「0 条」当作 empty——因为无法区分
@@ -386,6 +427,9 @@ class BaseFetcher(abc.ABC):
                 fetched_at=fetched_at,                                           # 抓取时间
                 request_count=self._request_count,                               # 请求数
                 dropped_navigation=dropped_nav,                                  # 剔除的导航链接数
+                dropped_by_filter=dropped_filter,                                # 关键词过滤丢弃数
+                filter_drop_reasons=dict(filter_reasons),                        # 丢弃原因明细
+                dropped_filter_docs=dropped_docs,                                # 被丢弃条目明细（供复核）
             )
 
         # 正常情况
@@ -396,6 +440,9 @@ class BaseFetcher(abc.ABC):
             fetched_at=fetched_at,           # 抓取时间
             request_count=self._request_count,  # 请求数
             dropped_navigation=dropped_nav,  # 剔除的导航链接数
+            dropped_by_filter=dropped_filter,  # 关键词过滤丢弃数
+            filter_drop_reasons=dict(filter_reasons),  # 丢弃原因明细
+            dropped_filter_docs=dropped_docs,  # 被丢弃条目明细（供复核）
         )
 
     def _collect(self) -> tuple[list[RawDoc], str]:
@@ -557,45 +604,90 @@ def drop_probable_navigation(docs: Iterable[RawDoc], list_url: str) -> list[RawD
 # 关键词过滤
 # ============================================================
 
-def apply_filters(docs: Iterable[RawDoc], filters: dict[str, Any] | None) -> list[RawDoc]:
-    """按关键词规则过滤条目。
+# 丢弃原因的稳定键名。用常量而非裸字符串，是为了让统计与测试断言有确定的取值。
+DROP_REASON_EXCLUDED = "excluded"        # 命中 exclude_keywords 被排除
+DROP_REASON_NOT_MATCHED = "not_matched"  # 未命中任何 include_keywords
 
-    过滤规则的存在意义：金融监管总局每年发布数百份文件，
-    其中与 AI 相关的可能只有十余份。没有过滤，人工核验成本会高到项目无法维持。
 
-    但过滤有漏检风险，因此设计上遵循两个原则：
+def filter_docs_with_reasons(
+    docs: Iterable[RawDoc], filters: dict[str, Any] | None
+) -> tuple[list[RawDoc], dict[str, int]]:
+    """按关键词规则过滤条目，返回「保留结果」与「丢弃原因计数」。
+
+    为什么要把丢弃数量单独返回
+    --------------------------
+    本函数的前身只返回保留结果，被丢弃的条目数无从知晓。而「关键词没命中」
+    正是本项目最需要警惕的一类静默丢失：一份标题里没有「人工智能」「数据」
+    等词、正文却含 AI 条款的文件，会被这里悄悄丢掉，抓取报告依旧显示 ok，
+    没有任何地方会提示有人被丢掉了。
+
+    这与 ``dropped_navigation`` 是同一条原则：**清洗只要不可见，
+    就会变成新的静默风险。** 把丢弃数与原因暴露出来，运维看到异常数字
+    （如某源今天丢了 80 条）才能立刻警觉。
+
+    区分两种丢弃原因的价值：``excluded`` 多说明排除词写得太宽，
+    ``not_matched`` 多说明包含词写得太窄——两者要采取的行动完全相反。
+
+    过滤规则的设计原则（沿用原实现）：
     1. **包含规则宽松**：宁可多留几条让人工筛掉，也不要漏掉重要政策
     2. **排除规则精确**：只排除确定无关的类别（如行政处罚决定书）
-    """
-    # 无过滤配置时原样返回
-    if not filters:
-        # 转成列表后返回
-        return list(docs)
 
-    # 取出包含关键词列表
+    返回 ``(保留的条目, {原因: 条数})``；未配置过滤规则时原因字典为空。
+    """
+    # 丢弃原因计数，形如 {"not_matched": 12}
+    reasons: dict[str, int] = {}
+
+    # 无过滤配置时原样返回，不做任何丢弃
+    if not filters:
+        # 转成列表后返回，原因字典保持为空
+        return list(docs), reasons
+
+    # 取出包含关键词列表。过滤掉空值——空字符串会让 `"" in title` 恒为真，
+    # 导致整源全量保留，是最容易被忽略的一种配置失误。
     include = [k for k in (filters.get("include_keywords") or []) if k]
-    # 取出排除关键词列表
+    # 取出排除关键词列表，同样过滤空值
     exclude = [k for k in (filters.get("exclude_keywords") or []) if k]
 
     # 结果容器
     kept: list[RawDoc] = []
     # 逐条判断
     for doc in docs:
-        # 标题文本
+        # 标题文本；标题为 None 时按空串处理，避免在其上做子串判断
         title = doc.title or ""
         # 排除规则优先：命中任一排除词即丢弃
         if any(word in title for word in exclude):
-            # 跳过该条
+            # 累计「被排除」计数后跳过该条
+            reasons[DROP_REASON_EXCLUDED] = reasons.get(DROP_REASON_EXCLUDED, 0) + 1
+            # 进入下一条
             continue
         # 未配置包含规则时全部保留
         if not include:
             # 保留
             kept.append(doc)
-            # 继续下一条
+            # 进入下一条
             continue
         # 命中任一包含词即保留
         if any(word in title for word in include):
             # 保留
             kept.append(doc)
-    # 返回过滤结果
+            # 进入下一条
+            continue
+        # 既未被排除、也未命中任何包含词——这是最需要警惕的一类丢弃，
+        # 因为它可能丢掉标题不含 AI 字样但正文含 AI 条款的文件
+        reasons[DROP_REASON_NOT_MATCHED] = reasons.get(DROP_REASON_NOT_MATCHED, 0) + 1
+
+    # 返回保留结果与丢弃原因计数
+    return kept, reasons
+
+
+def apply_filters(docs: Iterable[RawDoc], filters: dict[str, Any] | None) -> list[RawDoc]:
+    """按关键词规则过滤条目，只返回保留结果。
+
+    保留这个薄封装是为了不破坏既有调用方；实现委托给
+    ``filter_docs_with_reasons``，避免同一套规则存在两份实现各自演化。
+    需要知道丢弃了多少条、为什么丢时，请改用后者。
+    """
+    # 只取保留结果，忽略原因计数
+    kept, _reasons = filter_docs_with_reasons(docs, filters)
+    # 返回保留结果
     return kept
