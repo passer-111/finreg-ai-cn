@@ -219,6 +219,25 @@ def test_show_json_output_is_valid_json(capsys: pytest.CaptureFixture[str]) -> N
 # stale —— 时效性治理
 # ============================================================
 
+# 仓库内全部政策记录的最近核验日期。
+# 【为什么把它写成常量而不是在测试里取 today()】
+# stale 的判定依赖「基准日 - 核验日 > 阈值」。若测试隐含地以「今天」
+# 作基准，那么只要仓库数据不天天更新，天数就会逐日增长，
+# 断言迟早失效——这与代码正确性无关，纯属测试设计缺陷。
+# 把核验日固定成常量并显式传给 --as-of，测试就与运行日期彻底解耦。
+# 代价是：当贡献者批量更新核验台账后，这个常量需要同步更新。
+# 这个代价是可接受的——它会以「明确的一条测试失败」暴露出来，
+# 而不是让整片测试随时间悄悄变红。
+_VERIFIED_ON = "2026-10-03"
+
+# 由 _VERIFIED_ON 向后推 31 天得到的基准日，用于验证 --as-of 确实生效。
+# 【为什么是 31 天而不是 30 天】判定条件是「天数 > 阈值」。
+# 若取 30 天、阈值也取 30，则 30 > 30 为假，记录不会被列出，
+# 测试会误以为 --as-of 没生效。多推一天才能越过这个边界。
+# 这个边界由另一条测试（--days 0 + 基准日=核验日）从反面覆盖。
+_THIRTY_ONE_DAYS_LATER = "2026-11-03"
+
+
 def test_stale_with_huge_threshold_returns_ok(capsys: pytest.CaptureFixture[str]) -> None:
     """验证阈值极大时没有陈旧记录，退出码仍为 0。
 
@@ -258,15 +277,71 @@ def test_stale_day_zero_excludes_records_verified_today(capsys: pytest.CaptureFi
 
     这是「>」而非「>=」的语义确认：刚核验完的记录天数为 0，
     若把它判为超期，会让人对工具的判断力失去信任。
+
+    【为什么必须传 --as-of】
+    本用例最初写成「直接跑 ``stale --days 0``，断言没有超期项」，
+    理由是「当前库中记录均为近期核验」。这个理由在写下它的当天成立，
+    但它把断言绑死在**真实数据的核验日期**上：核验台账一变成两天前，
+    天数就成了 2，断言立刻失败——而代码一行没改。
+
+    这正是本项目最敌视的那类缺陷：**随时间自行变红的测试**。
+    它比没有测试更糟，因为红过一次之后，人们就开始习惯性忽略红灯，
+    校验闸门随之失效。修法是把「当天」变成显式输入，而不是靠巧合。
+
+    实现上不选 monkeypatch 而选给 CLI 加 ``--as-of`` 参数：
+    参数是**生产代码里真实存在的能力**（运维可用它预演未来某天的待核验队列），
+    而 monkeypatch 只是测试的脚手架。测一个真实存在的旋钮，
+    比测「我替换掉的某个内部函数」更接近用户实际会走的路径。
     """
-    # 阈值为 0
-    code = main(["stale", "--days", "0"])
+    # 先把基准日钉在仓库里记录的核验日，使「当天核验」成为确定事实
+    code = main(["stale", "--days", "0", "--as-of", _VERIFIED_ON])
     # 成功退出码
     assert code == EXIT_OK
     # 取输出
     out = capsys.readouterr().out
-    # 当前库中记录均为近期核验，因此不应有超期项
+    # 基准日即核验日，天数为 0，0 > 0 为假，因此不应有超期项
     assert "没有超过 0 天未核验的记录" in out
+
+
+def test_stale_as_of_shifts_days_forward(capsys: pytest.CaptureFixture[str]) -> None:
+    """验证 --as-of 能把基准日推到未来，从而让原本未超期的记录变为超期。
+
+    这条测试覆盖的是「预演」能力：运维想提前知道再过一个月
+    哪些记录会进入待核验队列，无需真的等到那天。
+    同时它也构成对 ``test_stale_day_zero_excludes_records_verified_today``
+    的反向验证——如果 --as-of 被静默忽略，那一条会通过而这一条会失败，
+    两条一起才能把「基准日确实生效」夹住。
+    """
+    # 把基准日推到核验日之后 31 天，此时每条记录都已核验满 31 天
+    code = main(["stale", "--days", "30", "--as-of", _THIRTY_ONE_DAYS_LATER])
+    # 成功退出码——陈旧记录属于待办而非错误，不改变退出码
+    assert code == EXIT_OK
+    # 取输出
+    out = capsys.readouterr().out
+    # 31 天 > 阈值 30，因此必然列出记录
+    assert "30 天未核验" in out
+    # 应显式回显基准日，否则用户看到的天数会与「今天」对不上而怀疑算错
+    assert _THIRTY_ONE_DAYS_LATER in out
+
+
+def test_stale_as_of_rejects_malformed_date(capsys: pytest.CaptureFixture[str]) -> None:
+    """验证 --as-of 收到非法日期时以用法错误码（2）结束。
+
+    为什么关心退出码而不是只关心「报错了」：
+    2 表示「用户把参数敲错了」，1 表示「数据有问题」。
+    CI 与脚本会据此分流——前者该改命令行，后者该去看数据。
+    若两者混为同一个码，自动化就没法正确处置。
+    """
+    # 传入一个不存在的日期，argparse 应在解析阶段就拒绝
+    with pytest.raises(SystemExit) as excinfo:
+        # 2026-02-30 不是合法日历日期
+        main(["stale", "--days", "30", "--as-of", "2026-02-30"])
+    # argparse 约定用法错误退出码为 2
+    assert excinfo.value.code == 2
+    # 错误信息应出现在 stderr 且指明格式期望
+    captured = capsys.readouterr()
+    # 断言提示里包含正确格式，便于用户自查
+    assert "YYYY-MM-DD" in captured.err
 
 
 # ============================================================

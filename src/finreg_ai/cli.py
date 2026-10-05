@@ -23,6 +23,8 @@ import argparse
 import json
 # 导入 sys 用于设置退出码
 import sys
+# 导入 date 类型：stale 的 --as-of 参数需要接收并返回日期对象
+from datetime import date
 # 导入 Sequence 类型标注。
 # 注意这里从 collections.abc 而非 typing 导入：Python 3.9 起
 # typing.Sequence 等别名已被标记为弃用，泛型容器类型应直接使用标准库抽象基类。
@@ -45,6 +47,41 @@ from finreg_ai.store import load_all_policies, load_sources
 # 退出码约定：0 成功，1 发现问题（校验失败），2 用法错误（argparse 默认）
 EXIT_OK = 0       # 一切正常
 EXIT_ISSUES = 1   # 发现数据问题
+
+
+def _parse_iso_date_arg(value: str) -> date:
+    """把 ``YYYY-MM-DD`` 形式的字符串解析为 ``date``，供 argparse 的 type 使用。
+
+    单独抽成模块级函数而非写 lambda 的原因：
+    argparse 的 ``type`` 收到的是原始字符串，若格式非法需要抛
+    ``ValueError`` 或 ``argparse.ArgumentTypeError``。
+    抛后者能把错误信息渲染成「用法错误」并返回退出码 2（而不是 1），
+    这样「用户敲错了参数格式」与「数据本身有问题」在退出码上可区分——
+    对 CI 而言这两者的处置方式完全不同。
+
+    显式写 rsplit 而非交给 ``date.fromisoformat``：后者对
+    ``2026-1-5``（月份未补零）等写法会接受，而我们希望格式严格统一，
+    因为该值可能被复制进 issue 正文与日志，格式漂移会让检索变困难。
+    """
+    # 严格按三段切分，不允许多余部分
+    parts = value.split("-")
+    # 段数必须为 3，否则说明不是 YYYY-MM-DD
+    if len(parts) != 3:
+        # 抛出 argparse 的用法错误，退出码为 2
+        raise argparse.ArgumentTypeError(f"日期格式应为 YYYY-MM-DD，收到：{value!r}")
+    # 年月日三段都必须是纯数字且长度正确
+    year, month, day = parts
+    # 逐段校验长度，拒绝 2026-1-5 这类未补零写法
+    if len(year) != 4 or len(month) != 2 or len(day) != 2:
+        # 抛出用法错误
+        raise argparse.ArgumentTypeError(f"日期格式应为 YYYY-MM-DD（需补零），收到：{value!r}")
+    # 交给标准库做真实日期校验（会拦住 2026-02-30 这类不存在的日期）
+    try:
+        # 三段均为数字时才能构造，否则抛 ValueError
+        return date(int(year), int(month), int(day))
+    except ValueError:
+        # 转换为用法错误，保持退出码语义一致
+        raise argparse.ArgumentTypeError(f"不是合法的日历日期：{value!r}") from None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -201,6 +238,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=180,                    # 默认 180 天
         metavar="N",                    # 占位符
         help="超过 N 天未核验视为陈旧，默认 180",  # 说明
+    )
+    # 【为什么需要这个参数】判定「陈旧」必须有一个基准日。
+    # 默认取北京时间今天，但把基准日做成可传入的，有两个必要理由：
+    #   1. **测试必须能注入固定日期**。否则测试结果随运行日期漂移——
+    #      今天跑是绿的，过两天同一条断言就红了，而代码一行没改。
+    #      本项目已经因此吃过一次亏：一条断言依赖「记录核验日期是今天」，
+    #      核验台账一变成两天前，CI 就无端变红。
+    #   2. **运维需要预演**。想提前知道「再过 60 天哪些记录会进入待核验队列」，
+    #      直接 `--as-of` 未来日期即可，不必等到真到那天。
+    stale_parser.add_argument(
+        "--as-of",                      # 参数名
+        type=_parse_iso_date_arg,       # 解析为 date，非法输入由 argparse 报错
+        default=None,                   # 默认 None 表示「取北京时间今天」
+        metavar="YYYY-MM-DD",           # 占位符，明确告知格式
+        help="以指定日期为基准计算未核验天数，默认取北京时间的今天",  # 说明
     )
 
     # 返回解析器
@@ -542,8 +594,12 @@ def cmd_stale(args: argparse.Namespace) -> int:
     """执行 stale 子命令。"""
     # 加载全部政策
     policies, _errors = load_all_policies()
-    # 以北京时间为基准
-    ref_day = today_china()
+    # 确定基准日。
+    # 【这一行是防测试漂移的关键】若用户显式传了 --as-of，就用它；
+    # 否则取北京时间今天。把基准日变成「可注入」而非在函数内部隐式取当天，
+    # 是为了让测试能钉死日期——否则同一条断言会在核验台账变旧后突然变红，
+    # 而代码一行没改，排查时极易误判为逻辑坏了。
+    ref_day = args.as_of or today_china()
     # 筛选陈旧记录
     stale = []
     # 逐条计算
@@ -564,8 +620,15 @@ def cmd_stale(args: argparse.Namespace) -> int:
         # 返回成功
         return EXIT_OK
 
-    # 打印标题
-    print(f"共 {len(stale)} 条记录超过 {args.days} 天未核验：")
+    # 打印标题。
+    # 用了 --as-of 时把基准日一并写进标题：否则用户看到的天数与「今天」对不上，
+    # 会怀疑工具算错了。写明基准日，输出即自解释。
+    if args.as_of is not None:
+        # 显式标注基准日
+        print(f"共 {len(stale)} 条记录超过 {args.days} 天未核验（基准日 {ref_day.isoformat()}）：")
+    else:
+        # 未指定基准日时保持原有输出格式
+        print(f"共 {len(stale)} 条记录超过 {args.days} 天未核验：")
     print()
     # 逐条输出
     for pid, days, policy in stale:
