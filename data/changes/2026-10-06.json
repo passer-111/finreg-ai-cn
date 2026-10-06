@@ -1,0 +1,600 @@
+{
+  "detected_on": "2026-10-06",
+  "generated_at": "2026-10-06T10:12:00+08:00",
+  "policies_scanned": 9,
+  "change_count": 59,
+  "high_significance_count": 0,
+  "failed_sources": [],
+  "changes": [
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1273452",
+      "title": "金融监管总局 科技部等部门联合召开科技保险交流推进会 多方协同支持科技创新",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：金融监管总局 科技部等部门联合召开科技保险交流推进会 多方协同支持科技创新（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1273452",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1264203",
+      "title": "国家金融监督管理总局就《银行业保险业网络安全管理办法（征求意见稿）》公开征求意见",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：国家金融监督管理总局就《银行业保险业网络安全管理办法（征求意见稿）》公开征求意见（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1264203",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1261708",
+      "title": "国家金融监督管理总局发布《关于银行业保险业人工智能安全开发应用的指导意见》",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：国家金融监督管理总局发布《关于银行业保险业人工智能安全开发应用的指导意见》（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1261708",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1261710",
+      "title": "国家金融监督管理总局有关司局负责人就《关于银行业保险业人工智能安全开发应用的指导意见》答记者问",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：国家金融监督管理总局有关司局负责人就《关于银行业保险业人工智能安全开发应用的指导意见》答记者问（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1261710",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1255773",
+      "title": "中国人民银行 工业和信息化部市场监管总局 金融监管总局 中国证监会 国家知识产权局 国家网信办 国家外汇局有关负责人就《金融产品网络营销管理办法》答记者问",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：中国人民银行 工业和信息化部市场监管总局 金融监管总局 中国证监会 国家知识产权局 国家网信办 国家外汇局有关负责人就《金融产品网络营销管理办法》答记者问（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1255773",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1250616",
+      "title": "科技部、金融监管总局、工业和信息化部、国家知识产权局《关于加快推动科技保险高质量发展 有力支撑高水平科技自立自强的若干意见》政策问答",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：科技部、金融监管总局、工业和信息化部、国家知识产权局《关于加快推动科技保险高质量发展 有力支撑高水平科技自立自强的若干意见》政策问答（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1250616",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1250615",
+      "title": "科技部、金融监管总局、工业和信息化部、国家知识产权局联合发布《关于加快推动科技保险高质量发展 有力支撑高水平科技自立自强的若干意见》",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：科技部、金融监管总局、工业和信息化部、国家知识产权局联合发布《关于加快推动科技保险高质量发展 有力支撑高水平科技自立自强的若干意见》（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1250615",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1239739",
+      "title": "国家金融监督管理总局有关司局负责人就《银行业保险业数字金融高质量发展实施方案》答记者问",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：国家金融监督管理总局有关司局负责人就《银行业保险业数字金融高质量发展实施方案》答记者问（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1239739",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:nfra-regulations:https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1239747",
+      "title": "国家金融监督管理总局发布《银行业保险业数字金融高质量发展实施方案》",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：国家金融监督管理总局发布《银行业保险业数字金融高质量发展实施方案》（来源：nfra-regulations）",
+      "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1239747",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2026-07/24/c_1786638889704872.htm",
+      "title": "小型个人信息处理者个人信息保护简化措施规定",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：小型个人信息处理者个人信息保护简化措施规定（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2026-07/24/c_1786638889704872.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2026-06/18/c_1783525609815499.htm",
+      "title": "网络数据安全风险评估办法",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：网络数据安全风险评估办法（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2026-06/18/c_1783525609815499.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2026-05/29/c_1781795864412597.htm",
+      "title": "互联网信息内容多渠道分发服务管理规定",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：互联网信息内容多渠道分发服务管理规定（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2026-05/29/c_1781795864412597.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2026-04/30/c_1779276538655621.htm",
+      "title": "民政部 工业和信息化部 广电总局 国家新闻出版署 国家网信办关于印发《公开募捐平台服务管理办法》的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：民政部 工业和信息化部 广电总局 国家新闻出版署 国家网信办关于印发《公开募捐平台服务管理办法》的通知（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2026-04/30/c_1779276538655621.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2026-04/30/c_1779276538353684.htm",
+      "title": "民政部 工业和信息化部 国家网信办关于印发《互联网公开募捐服务平台管理办法》的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：民政部 工业和信息化部 国家网信办关于印发《互联网公开募捐服务平台管理办法》的通知（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2026-04/30/c_1779276538353684.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2026-01/07/c_1769516655383334.htm",
+      "title": "​直播电商监督管理办法",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：​直播电商监督管理办法（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2026-01/07/c_1769516655383334.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2026-01/07/c_1769515215345420.htm",
+      "title": "网络交易平台规则监督管理办法",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：网络交易平台规则监督管理办法（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2026-01/07/c_1769515215345420.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2025-10/17/c_1762449728720008.htm",
+      "title": "个人信息出境认证办法",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：个人信息出境认证办法（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2025-10/17/c_1762449728720008.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2025-07/01/c_1753083518894995.htm",
+      "title": "关键信息基础设施商用密码使用管理规定",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关键信息基础设施商用密码使用管理规定（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2025-07/01/c_1753083518894995.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2025-05/23/c_1749711107835487.htm",
+      "title": "国家网络身份认证公共服务管理办法",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：国家网络身份认证公共服务管理办法（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2025-05/23/c_1749711107835487.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2025-04/30/c_1747718893685033.htm",
+      "title": "人工智能气象应用服务办法",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：人工智能气象应用服务办法（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2025-04/30/c_1747718893685033.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2025-03/21/c_1744174262156096.htm",
+      "title": "人脸识别技术应用安全管理办法",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：人脸识别技术应用安全管理办法（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2025-03/21/c_1744174262156096.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2025-02/14/c_1741233507681519.htm",
+      "title": "个人信息保护合规审计管理办法",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：个人信息保护合规审计管理办法（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2025-02/14/c_1741233507681519.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2024-06/14/c_1720043894161555.htm",
+      "title": "网络暴力信息治理规定",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：网络暴力信息治理规定（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2024-06/14/c_1720043894161555.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2024-03/22/c_1712776611775634.htm",
+      "title": "促进和规范数据跨境流动规定",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：促进和规范数据跨境流动规定（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2024-03/22/c_1712776611775634.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2023-03/23/c_1681211418907384.htm",
+      "title": "网信部门行政执法程序规定",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：网信部门行政执法程序规定（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2023-03/23/c_1681211418907384.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-department-rules:https://www.cac.gov.cn/2023-02/24/c_1678884830036813.htm",
+      "title": "个人信息出境标准合同办法",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：个人信息出境标准合同办法（来源：cac-department-rules）",
+      "url": "https://www.cac.gov.cn/2023-02/24/c_1678884830036813.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2026-04/24/c_1778769008779432.htm",
+      "title": "金融产品网络营销管理办法",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：金融产品网络营销管理办法（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2026-04/24/c_1778769008779432.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2026-02/28/c_1774010730056867.htm",
+      "title": "关于印发《未成年人用户数量巨大和对未成年人群体具有显著影响的网络平台服务提供者认定办法》的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于印发《未成年人用户数量巨大和对未成年人群体具有显著影响的网络平台服务提供者认定办法》的通知（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2026-02/28/c_1774010730056867.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2026-01/28/c_1771330044357878.htm",
+      "title": "国务院办公厅关于印发《政务移动互联网应用程序规范化管理办法》的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：国务院办公厅关于印发《政务移动互联网应用程序规范化管理办法》的通知（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2026-01/28/c_1771330044357878.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2026-01/23/c_1770728781060093.htm",
+      "title": "关于印发《可能影响未成年人身心健康的网络信息分类办法》的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于印发《可能影响未成年人身心健康的网络信息分类办法》的通知（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2026-01/23/c_1770728781060093.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2025-09/15/c_1759583017717009.htm",
+      "title": "国家网络安全事件报告管理办法",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：国家网络安全事件报告管理办法（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2025-09/15/c_1759583017717009.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2025-04/30/c_1747719075774684.htm",
+      "title": "关于印发《终端设备直连卫星服务管理规定》的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于印发《终端设备直连卫星服务管理规定》的通知（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2025-04/30/c_1747719075774684.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2025-02/08/c_1740714184323988.htm",
+      "title": "关于印发《互联网军事信息传播管理办法》的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于印发《互联网军事信息传播管理办法》的通知（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2025-02/08/c_1740714184323988.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2022-12/14/c_1672656825925035.htm",
+      "title": "工业和信息化部 国家互联网信息办公室关于进一步规范移动智能终端应用软件预置行为的通告",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：工业和信息化部 国家互联网信息办公室关于进一步规范移动智能终端应用软件预置行为的通告（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2022-12/14/c_1672656825925035.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2022-11/18/c_1670399936658129.htm",
+      "title": "关于实施个人信息保护认证的公告",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于实施个人信息保护认证的公告（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2022-11/18/c_1670399936658129.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2022-11/16/c_1670253725725039.htm",
+      "title": "互联网跟帖评论服务管理规定",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：互联网跟帖评论服务管理规定（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2022-11/16/c_1670253725725039.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2022-09/08/c_1664260384702890.htm",
+      "title": "互联网弹窗信息推送服务管理规定",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：互联网弹窗信息推送服务管理规定（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2022-09/08/c_1664260384702890.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2022-06/14/c_1656821626455324.htm",
+      "title": "移动互联网应用程序信息服务管理规定",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：移动互联网应用程序信息服务管理规定（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2022-06/14/c_1656821626455324.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2022-01/28/c_1644970476680085.htm",
+      "title": "国家互联网信息办公室关于开展境内金融信息服务报备工作的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：国家互联网信息办公室关于开展境内金融信息服务报备工作的通知（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2022-01/28/c_1644970476680085.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2021-03/22/c_1617990997054277.htm",
+      "title": "关于印发《常见类型移动互联网应用程序必要个人信息范围规定》的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于印发《常见类型移动互联网应用程序必要个人信息范围规定》的通知（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2021-03/22/c_1617990997054277.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2021-01/22/c_1612887880656609.htm",
+      "title": "互联网用户公众账号信息服务管理规定",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：互联网用户公众账号信息服务管理规定（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2021-01/22/c_1612887880656609.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2019-11/29/c_1576561820967678.htm",
+      "title": "关于印发《网络音视频信息服务管理规定》的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于印发《网络音视频信息服务管理规定》的通知（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2019-11/29/c_1576561820967678.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2019-07/22/c_1124781475.htm",
+      "title": "国家互联网信息办公室 国家发展和改革委员会 工业和信息化部 财政部关于发布《云计算服务安全评估办法》的公告",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：国家互联网信息办公室 国家发展和改革委员会 工业和信息化部 财政部关于发布《云计算服务安全评估办法》的公告（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2019-07/22/c_1124781475.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2018-02/02/c_1122358726.htm",
+      "title": "微博客信息服务管理规定",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：微博客信息服务管理规定（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2018-02/02/c_1122358726.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-normative-docs:https://www.cac.gov.cn/2017-10/30/c_1121878049.htm",
+      "title": "互联网新闻信息服务新技术新应用安全评估管理规定",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：互联网新闻信息服务新技术新应用安全评估管理规定（来源：cac-normative-docs）",
+      "url": "https://www.cac.gov.cn/2017-10/30/c_1121878049.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-policy-documents:https://www.cac.gov.cn/2026-08/21/c_1789061449039952.htm",
+      "title": "促进网信企业高质量发展行动计划",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：促进网信企业高质量发展行动计划（来源：cac-policy-documents）",
+      "url": "https://www.cac.gov.cn/2026-08/21/c_1789061449039952.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-policy-documents:https://www.cac.gov.cn/2026-07/21/c_1786380789858394.htm",
+      "title": "深化互联网协议第六版",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：深化互联网协议第六版（来源：cac-policy-documents）",
+      "url": "https://www.cac.gov.cn/2026-07/21/c_1786380789858394.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-policy-documents:https://www.cac.gov.cn/2026-05/08/c_1779979789523320.htm",
+      "title": "智能体规范应用与创新发展实施意见",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：智能体规范应用与创新发展实施意见（来源：cac-policy-documents）",
+      "url": "https://www.cac.gov.cn/2026-05/08/c_1779979789523320.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-policy-documents:https://www.cac.gov.cn/2025-08/27/c_1758018277755538.htm",
+      "title": "国务院关于深入实施“人工智能+”行动的意见",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：国务院关于深入实施“人工智能+”行动的意见（来源：cac-policy-documents）",
+      "url": "https://www.cac.gov.cn/2025-08/27/c_1758018277755538.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-policy-documents:https://www.cac.gov.cn/2023-09/15/c_1696347685563097.htm",
+      "title": "关于进一步加强网络侵权信息举报工作的指导意见",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于进一步加强网络侵权信息举报工作的指导意见（来源：cac-policy-documents）",
+      "url": "https://www.cac.gov.cn/2023-09/15/c_1696347685563097.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-policy-documents:https://www.cac.gov.cn/2021-02/09/c_1614442843753738.htm",
+      "title": "关于印发《关于加强网络直播规范管理工作的指导意见》的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于印发《关于加强网络直播规范管理工作的指导意见》的通知（来源：cac-policy-documents）",
+      "url": "https://www.cac.gov.cn/2021-02/09/c_1614442843753738.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-policy-documents:https://www.cac.gov.cn/2019-12/27/c_1578986455686625.htm",
+      "title": "关于印发《App违法违规收集使用个人信息行为认定方法》的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于印发《App违法违规收集使用个人信息行为认定方法》的通知（来源：cac-policy-documents）",
+      "url": "https://www.cac.gov.cn/2019-12/27/c_1578986455686625.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-policy-documents:https://www.cac.gov.cn/2019-07/26/c_1124802764.htm",
+      "title": "关于不再指导企业主办的商业性网络安全会议、竞赛活动的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于不再指导企业主办的商业性网络安全会议、竞赛活动的通知（来源：cac-policy-documents）",
+      "url": "https://www.cac.gov.cn/2019-07/26/c_1124802764.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-policy-documents:https://www.cac.gov.cn/2018-04/13/c_1122676837.htm",
+      "title": "关于推动资本市场服务网络强国建设的指导意见",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于推动资本市场服务网络强国建设的指导意见（来源：cac-policy-documents）",
+      "url": "https://www.cac.gov.cn/2018-04/13/c_1122676837.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-policy-documents:https://www.cac.gov.cn/2016-08/22/c_1119430337.htm",
+      "title": "关于加强国家网络安全标准化工作的若干意见",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于加强国家网络安全标准化工作的若干意见（来源：cac-policy-documents）",
+      "url": "https://www.cac.gov.cn/2016-08/22/c_1119430337.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-policy-documents:https://www.cac.gov.cn/2014-05/10/c_1115147984.htm",
+      "title": "关于变更互联网新闻信息服务单位审批备案和外国机构在中国境内提供金融信息服务业务审批实施机关的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于变更互联网新闻信息服务单位审批备案和外国机构在中国境内提供金融信息服务业务审批实施机关的通知（来源：cac-policy-documents）",
+      "url": "https://www.cac.gov.cn/2014-05/10/c_1115147984.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:cac-policy-documents:https://www.cac.gov.cn/2014-05/10/c_1112142115.htm",
+      "title": "关于加强党政机关网站安全管理的通知",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：关于加强党政机关网站安全管理的通知（来源：cac-policy-documents）",
+      "url": "https://www.cac.gov.cn/2014-05/10/c_1112142115.htm",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:csrc-regulations:https://www.csrc.gov.cn/csrc/c101953/c7202800/content.shtml",
+      "title": "【第218号令】《证券期货业网络和信息安全管理办法》",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：【第218号令】《证券期货业网络和信息安全管理办法》（来源：csrc-regulations）",
+      "url": "https://www.csrc.gov.cn/csrc/c101953/c7202800/content.shtml",
+      "fields": []
+    },
+    {
+      "change_type": "discovered",
+      "policy_id": "pending:csrc-regulations:https://www.csrc.gov.cn/csrc/c101838/c1021955/content.shtml",
+      "title": "【第152号令】《证券基金经营机构信息技术管理办法》",
+      "detected_on": "2026-10-06",
+      "significance": "medium",
+      "detail": "发现新条目待录入：【第152号令】《证券基金经营机构信息技术管理办法》（来源：csrc-regulations）",
+      "url": "https://www.csrc.gov.cn/csrc/c101838/c1021955/content.shtml",
+      "fields": []
+    }
+  ]
+}
