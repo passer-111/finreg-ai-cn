@@ -344,8 +344,12 @@ cd docs && python -m http.server 8000
 
 发布走 `.github/workflows/pages.yml`：CI 里构建、以 Pages 产物形式上传。
 `docs/` 是**构建产物**，已写进 `.gitignore`，不入库。
-仓库侧不需要任何手动设置：`pages.yml` 里的 `configure-pages` 带
-`enablement: true`，首次运行会自动把 Pages 的 Source 设为「GitHub Actions」。
+
+仓库侧需先把 Pages 的 Source 设为「GitHub Actions」——这是**一次性**设置，
+且**需要仓库管理权限**：Settings → Pages → Source，或一条
+`POST /repos/{owner}/{repo}/pages` 调用。默认的 workflow 令牌不含
+`administration` 权限，无法替仓库完成这一步；此后每次推送由 `pages.yml`
+自动构建与部署，无需再动。
 
 ### 为什么没有数据库
 
