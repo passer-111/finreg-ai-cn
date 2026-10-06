@@ -5,9 +5,99 @@
 检索当前有效的 AI 合规政策，聚焦银行业、证券期货业、保险业与支付清算领域。
 每条记录都标注**此刻是否有效**、**被谁取代**、**最近何时核验过**。
 
+## 对外展示：静态站点
+
+`docs/` 是 `data/` 的一个只读视图：把政策、变更流与版本链渲染成一个
+可公开访问的网站。站点没有自己的数据——页面上的每个字都能回溯到 `data/` 里的某条记录。
+线上地址：https://passer-111.github.io/finreg-ai-cn/
+
+### 技术栈
+
+- **生成器**：Python（`src/finreg_ai/site.py`，命令 `finreg build-site`）
+- **前端**：手写 HTML / CSS / JS（`site/assets/`），无框架、无 npm、无 CDN、无构建步骤
+- **检索**：客户端子串匹配（中文无需分词），无服务端
+- **部署**：GitHub Pages，由 `.github/workflows/pages.yml` 发布
+
+### 目录结构
+
+```
+site/                       # 前端源文件
+└── assets/
+    ├── style.css           # 样式：浅色 / 深色自适应
+    └── app.js              # 首页筛选与检索
+
+docs/                       # 构建产物，已 gitignore，不入库
+├── index.html              # 首页：政策卡片 + 筛选 / 检索
+├── changes.html            # 变更流
+├── policies/<id>.html      # 每条政策一个详情页（含版本链时间轴）
+├── data/policies.json      # 政策数据（机读）
+├── data/changes.json       # 变更流数据（机读）
+└── assets/                 # 样式与脚本（生成时复制自 site/assets/）
+```
+
+### 依赖与构建
+
+站点没有独立的前端依赖，构建只需项目本体已安装：
+
+```bash
+pip install -e ".[dev]"                          # 若尚未安装项目
+finreg build-site                                # 生成到 docs/
+finreg build-site --output /tmp/site-preview     # 换个位置，随手可删
+```
+
+### 本地预览
+
+构建产物是纯静态文件，用任意静态服务器预览即可。必须走 HTTP——
+直接用 file:// 打开会让相对路径与脚本行为不一致：
+
+```bash
+cd docs && python -m http.server 8000            # 浏览器打开 http://localhost:8000
+```
+
+### 部署
+
+推送主干（数据 / 代码 / 前端资源变动）、抓取流程跑完后或手动触发时，
+`pages.yml` 在 CI 里构建、以 Pages 产物形式上传并部署到 GitHub Pages。
+`docs/` 是构建产物，已写进 `.gitignore`，不入库。
+
+仓库侧需先把 Pages 的 Source 设为「GitHub Actions」——这是**一次性**设置，
+且**需要仓库管理权限**：Settings → Pages → Source，或一条
+`POST /repos/{owner}/{repo}/pages` 调用。默认的 workflow 令牌不含
+`administration` 权限，无法替仓库完成这一步；此后每次推送由 `pages.yml`
+自动构建与部署，无需再动。
+
+### 架构：无数据库、无服务端
+
+站点是纯静态站：`data/` → 生成器 → `docs/` → Pages。没有数据库、没有后端、
+没有构建步骤、没有外部依赖——样式与检索脚本是两个手写文件（`site/assets/`），不引 CDN。
+
+`data/` 是唯一的真相源：写入只经由 git 与 PR（「机器发现，人认定」的闸门），
+无常驻服务，构建与发布由 GitHub Actions 完成。任何人克隆仓库后
+`pip install && finreg validate` 即可直接运行。
+
+数据量小（`data/` 全量约 222 KB），政策全量直接写进页面，检索在客户端做子串匹配
+（中文按子串匹配天然可用，不必分词），不需要服务端索引。
+
+### 站点重点展示的三类信息
+
+1. **变更流** —— 直接渲染 `data/changes/*.json`，这是全项目唯一的「活」证据；
+   页面同时写明「这些条目尚未经人工认定」，不让机器的一次关键词命中
+   冒充成合规事实
+2. **版本链时间轴** —— 把 `supersedes` / `effective_from` / `effective_until` /
+   `status` 画成一条线，呈现一份文件的演进而非某个快照
+3. **待核验缺口** —— 「现行有效但查不到施行日期」在页面上被显式标出，
+   而不是留白等人误读
+
+### 站点没有自己的数据
+
+生成器读的就是 `data/`，页面上没有任何人工单独维护的内容。
+这条性质由测试钉死：`tests/test_site.py` 断言
+**同一份数据 + 同一时间戳 → 逐字节相同的产物**。
+哪天页面变了却说不清是哪份数据变的，那条测试会先红。
+
 ---
 
-## ⚠️ 免责声明（请先读这一段）
+## ⚠️ 免责声明
 
 **本项目是技术整理工具，不构成法律意见。**
 
@@ -316,98 +406,6 @@ $ finreg list --effective-only
 - **9 条政策记录**，其中 8 条现行有效、1 条为征求意见稿
 - **65 条关键义务**（人工从原文提炼，均带条款定位）
 - **14 个机构**、**13 个数据源**已登记（其中 6 个自动抓取、1 个人工录入、6 个未启用/按需运行）
-
----
-
-## 对外展示：静态站点
-
-`docs/` 是 `data/` 的一个只读视图：把政策、变更流与版本链渲染成一个
-可公开访问的网站。站点没有自己的数据——页面上的每个字都能回溯到 `data/` 里的某条记录。
-线上地址：https://passer-111.github.io/finreg-ai-cn/
-
-### 技术栈
-
-- **生成器**：Python（`src/finreg_ai/site.py`，命令 `finreg build-site`）
-- **前端**：手写 HTML / CSS / JS（`site/assets/`），无框架、无 npm、无 CDN、无构建步骤
-- **检索**：客户端子串匹配（中文无需分词），无服务端
-- **部署**：GitHub Pages，由 `.github/workflows/pages.yml` 发布
-
-### 目录结构
-
-```
-site/                       # 前端源文件
-└── assets/
-    ├── style.css           # 样式：浅色 / 深色自适应
-    └── app.js              # 首页筛选与检索
-
-docs/                       # 构建产物，已 gitignore，不入库
-├── index.html              # 首页：政策卡片 + 筛选 / 检索
-├── changes.html            # 变更流
-├── policies/<id>.html      # 每条政策一个详情页（含版本链时间轴）
-├── data/policies.json      # 政策数据（机读）
-├── data/changes.json       # 变更流数据（机读）
-└── assets/                 # 样式与脚本（生成时复制自 site/assets/）
-```
-
-### 依赖与构建
-
-站点没有独立的前端依赖，构建只需项目本体已安装：
-
-```bash
-pip install -e ".[dev]"                          # 若尚未安装项目
-finreg build-site                                # 生成到 docs/
-finreg build-site --output /tmp/site-preview     # 换个位置，随手可删
-```
-
-### 本地预览
-
-构建产物是纯静态文件，用任意静态服务器预览即可。必须走 HTTP——
-直接用 file:// 打开会让相对路径与脚本行为不一致：
-
-```bash
-cd docs && python -m http.server 8000            # 浏览器打开 http://localhost:8000
-```
-
-### 部署
-
-推送主干（数据 / 代码 / 前端资源变动）、抓取流程跑完后或手动触发时，
-`pages.yml` 在 CI 里构建、以 Pages 产物形式上传并部署到 GitHub Pages。
-`docs/` 是构建产物，已写进 `.gitignore`，不入库。
-
-仓库侧需先把 Pages 的 Source 设为「GitHub Actions」——这是**一次性**设置，
-且**需要仓库管理权限**：Settings → Pages → Source，或一条
-`POST /repos/{owner}/{repo}/pages` 调用。默认的 workflow 令牌不含
-`administration` 权限，无法替仓库完成这一步；此后每次推送由 `pages.yml`
-自动构建与部署，无需再动。
-
-### 架构：无数据库、无服务端
-
-站点是纯静态站：`data/` → 生成器 → `docs/` → Pages。没有数据库、没有后端、
-没有构建步骤、没有外部依赖——样式与检索脚本是两个手写文件（`site/assets/`），不引 CDN。
-
-`data/` 是唯一的真相源：写入只经由 git 与 PR（「机器发现，人认定」的闸门），
-无常驻服务，构建与发布由 GitHub Actions 完成。任何人克隆仓库后
-`pip install && finreg validate` 即可直接运行。
-
-数据量小（`data/` 全量约 222 KB），政策全量直接写进页面，检索在客户端做子串匹配
-（中文按子串匹配天然可用，不必分词），不需要服务端索引。
-
-### 站点重点展示的三类信息
-
-1. **变更流** —— 直接渲染 `data/changes/*.json`，这是全项目唯一的「活」证据；
-   页面同时写明「这些条目尚未经人工认定」，不让机器的一次关键词命中
-   冒充成合规事实
-2. **版本链时间轴** —— 把 `supersedes` / `effective_from` / `effective_until` /
-   `status` 画成一条线，呈现一份文件的演进而非某个快照
-3. **待核验缺口** —— 「现行有效但查不到施行日期」在页面上被显式标出，
-   而不是留白等人误读
-
-### 站点没有自己的数据
-
-生成器读的就是 `data/`，页面上没有任何人工单独维护的内容。
-这条性质由测试钉死：`tests/test_site.py` 断言
-**同一份数据 + 同一时间戳 → 逐字节相同的产物**。
-哪天页面变了却说不清是哪份数据变的，那条测试会先红。
 
 ---
 
