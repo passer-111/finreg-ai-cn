@@ -1,0 +1,86 @@
+# ============================================================
+# 【草稿】政策补录：证券期货业网络和信息安全管理办法
+# ------------------------------------------------------------
+# 状态：未经人工逐字核验的候选记录，核验前不得提升为正式记录、
+# 不得作为合规依据。字段值来源与核验边界见文末 verified_note。
+# ============================================================
+
+# ---- 身份标识 ----
+id: csrc-2023-cybersecurity                      # 唯一标识
+title: 证券期货业网络和信息安全管理办法            # 官方全称
+title_en: null                                   # 未查到官方英文版
+issuer: 中国证券监督管理委员会                     # 发布机关
+issuer_code: csrc                                # 机构短代码
+doc_number: 中国证券监督管理委员会令（第218号）     # 发文字号
+
+# ---- 法域 ----
+jurisdiction: CN                                 # 法域
+jurisdiction_detail: null                        # 国家层面
+
+# ---- 效力判断 ----
+instrument_type: 部门规章                          # 层级：以证监会令发布
+bindingness: binding                             # 约束力：设专章规定法律责任，属强制义务
+ai_relevance: related                            # 相关度：证券期货机构信息系统安全是部署 AI 应用的基础设施合规要求
+
+# ---- 所属领域与主题 ----
+domain:                                          # 所属领域
+  - 证券                                         # 证券经营机构
+  - 基金                                         # 基金管理机构
+  - 网络安全                                      # 网络和信息安全
+topics:                                          # 主题标签
+  - cybersecurity                                # 网络和信息安全（核心主题）
+  - business-continuity                          # 业务连续性保障
+  - data-security                                # 数据安全
+  - supervision-and-reporting                    # 报告义务
+
+# ---- 时效性 ----
+status: effective                                # 当前状态：现行有效
+published_on: 2023-02-27                         # 公布日期（令文落款；官网页面挂网日期为 2023-03-06，见 notes）
+effective_from: 2023-05-01                       # 生效日期（依据：第六十二条「本办法自2023年5月1日起施行」）
+effective_until: null                            # 无固定失效期限
+supersedes: []                                   # 未取代先前文件（待人工核对是否废止旧规）
+superseded_by: null                              # 未被取代
+amends: []                                       # 未修订任何文件
+amended_by: []                                   # 未被修订
+
+# ---- 版本链 ----
+versions:
+  - version: 1                                   # 首版
+    published_on: 2023-02-27                     # 公布日期
+    effective_from: 2023-05-01                   # 生效日期（原文依据：第六十二条）
+    effective_until: null                        # 尚未失效
+    status: effective                            # 现行有效
+    url: https://www.csrc.gov.cn/csrc/c101953/c7202800/content.shtml  # 官方原文链接
+    archived_url: null                           # 官方页面可访问
+    content_hash: null                           # 未计算摘要
+    change_note: null                            # 首版
+
+# ---- 来源溯源 ----
+source:
+  url: https://www.csrc.gov.cn/csrc/c101953/c7202800/content.shtml  # 官方原文链接（证监会「证券期货规章」栏目）
+  site: csrc.gov.cn                              # 来源站点
+  tier: primary                                  # 官方原始渠道
+  fetched_at: "2026-10-07T03:45:00+08:00"        # 链接实测时间
+  http_status: 200                               # 2026-10-07 curl 实测（带浏览器 UA）
+  content_hash: null                             # 未计算摘要
+  snapshot_path: null                            # 未保存快照
+
+# ---- 核验台账 ----
+last_verified: 2026-10-07                        # 最近核验日期（链接可访问性）
+verified_by: automated                           # 检索整理 + 链接实测，尚未人工逐字核对
+verified_note: 2026-10-07 实测官方页面 HTTP 200（curl 带浏览器 UA）。施行日期依据第六十二条「本办法自2023年5月1日起施行」；令文落款日期 2023 年 2 月 27 日，证监会官网挂网日期 2023 年 3 月 6 日，本记录以令文落款为公布日期。字段值未逐字人工核对——提升为正式记录前必须完成。
+
+# ---- 适用主体 ----
+applicable_to:                                   # 适用主体（原文第二条，待人工逐字核对）
+  - 证券期货经营机构                              # 概括原文适用范围
+  - 为证券期货业务活动提供信息技术服务的机构        # 概括原文适用范围
+
+# ---- 关键义务 ----
+key_obligations: []                              # 待人工从原文提炼，机器不代为概括
+
+# ---- 其它 ----
+language: zh-CN                                  # 正文语言
+tags:                                            # 自由标签
+  - 证监会令                                      # 发文形式
+  - 网络和信息安全                                 # 主题标注
+notes: 共六十二条。与 AI 合规的连接点：证券期货机构上线智能投顾、量化交易系统等 AI 应用时，其信息系统须满足本办法的安全等级保护、应急演练与报告要求；办法对信息技术服务机构的管理义务，也约束金融机构采购第三方 AI 服务的行为。

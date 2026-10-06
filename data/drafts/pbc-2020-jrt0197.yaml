@@ -1,0 +1,83 @@
+# ============================================================
+# 【草稿】政策补录：金融数据安全 数据安全分级指南（JR/T 0197—2020）
+# ------------------------------------------------------------
+# 状态：未经人工逐字核验的候选记录，核验前不得提升为正式记录、
+# 不得作为合规依据。字段值来源与核验边界见文末 verified_note。
+# ============================================================
+
+# ---- 身份标识 ----
+id: pbc-2020-jrt0197                             # 唯一标识
+title: 金融数据安全 数据安全分级指南               # 官方全称
+title_en: null                                   # 未查到官方英文版
+issuer: 中国人民银行                              # 发布机关
+issuer_code: pbc                                 # 机构短代码
+doc_number: JR/T 0197—2020                       # 金融行业标准编号
+
+# ---- 法域 ----
+jurisdiction: CN                                 # 法域
+jurisdiction_detail: null                        # 国家层面
+
+# ---- 效力判断 ----
+instrument_type: 其他                             # 层级：金融行业标准（JR/T），schema 无对应项，故归「其他」，见 notes
+bindingness: soft-law                            # 约束力：推荐性行业标准，但监管检查实际参照执行，构成事实约束
+ai_relevance: related                            # 相关度：数据分级结果是 AI 训练数据可用性判断的直接依据
+
+# ---- 所属领域与主题 ----
+domain:                                          # 所属领域
+  - 金融                                         # 金融业机构
+  - 数据                                         # 数据安全分级
+topics:                                          # 主题标签
+  - data-security                                # 数据安全（核心主题）
+  - ai-governance                                # 数据分级为 AI 合规前置条件
+  - data-quality                                 # 数据管理
+
+# ---- 时效性 ----
+status: effective                                # 当前状态：现行有效（金标委公开平台在营，未见废止信息）
+published_on: 2020-09-23                         # 发布日期（平台著录「发布日期」）
+effective_from: 2020-09-23                       # 实施日期（平台著录「实施日期」，与发布同日）
+effective_until: null                            # 无固定失效期限
+supersedes: []                                   # 未取代先前文件（待人工核对）
+superseded_by: null                              # 未被取代
+amends: []                                       # 未修订任何文件
+amended_by: []                                   # 未被修订
+
+# ---- 版本链 ----
+versions:
+  - version: 1                                   # 首版
+    published_on: 2020-09-23                     # 发布日期
+    effective_from: 2020-09-23                   # 实施日期
+    effective_until: null                        # 尚未失效
+    status: effective                            # 现行有效
+    url: https://cfstc.pbc.gov.cn/bzgk/detail/?id=0&bzId=1873  # 金标委金融标准全文公开平台详情页
+    archived_url: null                           # 官方页面可访问
+    content_hash: null                           # 未计算摘要
+    change_note: null                            # 首版
+
+# ---- 来源溯源 ----
+source:
+  url: https://cfstc.pbc.gov.cn/bzgk/detail/?id=0&bzId=1873  # 官方详情页（著录信息 + 全文在线阅读）
+  site: cfstc.pbc.gov.cn                         # 来源站点（全国金融标准化技术委员会金融标准全文公开平台）
+  tier: primary                                  # 官方原始渠道
+  fetched_at: "2026-10-07T03:45:00+08:00"        # 链接实测时间
+  http_status: 200                               # 2026-10-07 curl 实测（带浏览器 UA）
+  content_hash: null                             # 未计算摘要
+  snapshot_path: null                            # 未保存快照
+
+# ---- 核验台账 ----
+last_verified: 2026-10-07                        # 最近核验日期（链接可访问性）
+verified_by: automated                           # 检索整理 + 链接实测，尚未人工逐字核对
+verified_note: 2026-10-07 实测官方详情页 HTTP 200（curl 带浏览器 UA）。发布与实施日期均取自平台著录信息（2020-09-23）。页面含「在线预览」式全文，但字段值未逐字人工核对——提升为正式记录前必须完成。
+
+# ---- 适用主体 ----
+applicable_to:                                   # 适用主体（标准范围条款，待人工逐字核对）
+  - 金融业机构                                    # 概括标准适用范围
+
+# ---- 关键义务 ----
+key_obligations: []                              # 待人工从原文提炼，机器不代为概括
+
+# ---- 其它 ----
+language: zh-CN                                  # 正文语言
+tags:                                            # 自由标签
+  - 金融行业标准                                   # 文件性质
+  - 数据分级                                      # 主题标注
+notes: 层级归类说明同 JR/T 0171：金融行业标准暂归「其他」。与 AI 合规的连接点：本标准给出金融数据安全分级（1 至 5 级）的判定规则，是金融机构判断「某类数据能否进入模型训练语料」的量化依据——分级越高，进入训练流程所需的安全措施越严格。
