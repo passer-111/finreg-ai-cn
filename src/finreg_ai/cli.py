@@ -1,15 +1,17 @@
 """命令行入口 —— 通过 ``finreg`` 命令使用本项目。
 
-提供五组命令：
+提供七组命令：
 
 ===============  ====================================================
 命令              用途
 ===============  ====================================================
 ``fetch``         执行抓取流水线，发现新政策并产出变更流
 ``validate``      校验仓库全部数据的完整性（CI 使用）
+``validate-sources``  只校验数据源登记表
 ``list``          列出政策记录，支持按状态、机构、相关度筛选
 ``show``          查看单条政策记录的完整信息
 ``stale``         列出超期未核验的记录（时效性治理的核心工具）
+``build-site``    从 data/ 生成静态站点（对外展示的只读视图）
 ===============  ====================================================
 
 设计上使用标准库 ``argparse`` 而非 click 等第三方库。
@@ -29,6 +31,8 @@ from datetime import date
 # 注意这里从 collections.abc 而非 typing 导入：Python 3.9 起
 # typing.Sequence 等别名已被标记为弃用，泛型容器类型应直接使用标准库抽象基类。
 from collections.abc import Sequence
+# 导入 Path：build-site 的 --output 需要接收路径
+from pathlib import Path
 
 # 导入包版本号
 from finreg_ai import __version__
@@ -46,6 +50,8 @@ from finreg_ai.fetchers.base import (
 from finreg_ai.models import policy_to_dict
 # 导入流水线函数
 from finreg_ai.pipeline import run_pipeline, validate_repository
+# 导入静态站生成器
+from finreg_ai.site import build_site
 # 导入数据加载函数
 from finreg_ai.store import load_all_policies, load_sources
 
@@ -271,6 +277,30 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,                   # 默认 None 表示「取北京时间今天」
         metavar="YYYY-MM-DD",           # 占位符，明确告知格式
         help="以指定日期为基准计算未核验天数，默认取北京时间的今天",  # 说明
+    )
+
+    # ------------------------------------------------------------
+    # build-site：生成静态站点
+    # ------------------------------------------------------------
+    site_parser = subparsers.add_parser(
+        "build-site",
+        help="从 data/ 生成静态站点（对外展示的只读视图）",
+    )
+    # 输出目录。做成可配置而非写死，有两个必要理由：
+    #   1. CI 里需要输出到临时目录再作为发布产物上传，不该污染工作区；
+    #   2. 本地预览时可能想生成到一个随手可删的位置。
+    site_parser.add_argument(
+        "--output",                     # 参数名
+        type=Path,                      # argparse 直接转成 Path
+        default=None,                   # 默认 None 表示使用 site.DEFAULT_OUTPUT_DIR
+        metavar="DIR",                  # 占位符
+        help="输出目录，默认 docs/",      # 说明
+    )
+    # 输出 JSON 以便程序消费（CI 里用来判断构建结果）
+    site_parser.add_argument(
+        "--json",                       # 参数名
+        action="store_true",            # 布尔开关
+        help="以 JSON 格式输出构建结果",   # 说明
     )
 
     # 返回解析器
@@ -813,6 +843,74 @@ def cmd_stale(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_build_site(args: argparse.Namespace) -> int:
+    """执行 build-site 子命令：把 data/ 渲染成静态站点。"""
+    # 执行构建。时间戳与数据来源都不注入，由生成器自己取——
+    # 命令行是「真实运行」的入口，只有测试才需要钉死这些值。
+    result = build_site(output_dir=args.output)
+
+    # JSON 输出模式
+    if args.json:
+        # 输出结构化结果，键名与 SiteBuildResult 字段一致
+        print(
+            json.dumps(
+                {
+                    "output_dir": result.output_dir,        # 输出目录
+                    "page_count": result.page_count,        # 页面数
+                    "policy_count": result.policy_count,    # 政策数
+                    "change_count": result.change_count,    # 变更条目数
+                    "generated_at": result.generated_at,    # 生成时间
+                    "problems": result.problems,            # 构建本身的问题
+                    "record_issue_count": result.record_issue_count,  # 记录校验提示数
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    else:
+        # 人类可读输出
+        print(f"站点已生成 —— {result.output_dir}")
+        # 规模统计
+        print(
+            f"  {result.policy_count} 条政策、{result.page_count} 个页面、"
+            f"{result.change_count} 条待处理变更"
+        )
+        # 预览提示。
+        # 必须给出可执行的下一步：站点是纯静态的，用 file:// 直接打开会因
+        # 浏览器的本地文件策略而让相对路径与脚本行为不一致，
+        # 因此要引导使用者起一个本地 HTTP 服务。
+        print()
+        print("本地预览：")
+        print(f"  cd {result.output_dir} && python -m http.server 8000")
+        print("  然后浏览 http://localhost:8000/")
+
+    # 构建过程中发现的问题必须显式报出，绝不静默通过。
+    # 它们不阻断构建（站点要能展示「已知的部分」），但也不该被忽略——
+    # 「少了几条记录」与「数据就是这样」在使用者眼里没有任何区别。
+    if result.problems:
+        # 留空行与上文分隔
+        print()
+        # 打印问题清单
+        print(f"构建提示（{len(result.problems)} 项，未阻断构建）：")
+        # 逐条输出
+        for problem in result.problems:
+            # 打印
+            print(f"  - {problem}")
+
+    # 数据记录层面的校验提示只给条数，把「看详情」导回 finreg validate。
+    # 若在这里逐条打出十几行告警，上面那几行真正的构建问题就会被淹没，
+    # 而告警一多，人就会习惯性忽略——那比不告警更糟。
+    if result.record_issue_count:
+        # 打印一行并指向真正的详情入口
+        print(f"记录校验提示 {result.record_issue_count} 条（运行 finreg validate 查看详情）")
+
+    # 构建本身不因数据问题失败——这与 fetch 的语义不同：
+    # fetch 失败意味着「今天的数据没抓到」，是数据缺失；
+    # build-site 失败意味着「页面没生成出来」，是发布事故。
+    # 前者记问题、后者才该返回非零。因此这里恒定返回成功。
+    return EXIT_OK
+
+
 # ============================================================
 # 入口
 # ============================================================
@@ -825,6 +923,7 @@ _COMMANDS = {
     "list": cmd_list,                         # 列出
     "show": cmd_show,                         # 查看单条
     "stale": cmd_stale,                       # 陈旧记录
+    "build-site": cmd_build_site,             # 生成静态站点
 }
 
 

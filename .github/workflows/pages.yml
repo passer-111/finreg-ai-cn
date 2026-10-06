@@ -1,0 +1,156 @@
+# ============================================================
+# 发布站点 —— 把 data/ 渲染成静态站并部署到 GitHub Pages
+#
+# 为什么不把生成物提交进仓库
+# --------------------------
+# 站点是 git 数据的一个**纯函数式视图**：同一份数据重新生成一次，
+# 结果逐字节相同（这一点由 tests/test_site.py 断言）。
+# 既然可重现，就没有理由把产物也存一份——那只会让每次数据变化
+# 都产生两份 diff，与 fetch.yml 的自动提交互相竞争。
+# 因此 docs/ 是构建产物，已写进 .gitignore，只在 CI 里生成与上传。
+#
+# 为什么需要 workflow_run 触发
+# ----------------------------
+# fetch.yml 用 GITHUB_TOKEN 推送数据提交，而**用 GITHUB_TOKEN 推送
+# 不会触发 push 事件驱动的工作流**。只写 `on: push` 的话，
+# 每天抓取到的新数据永远不会让站点重新发布——
+# 页面会安静地停在旧版本上，而这正是本项目最忌讳的那种「静默」。
+#
+# 因此这里额外挂一个 workflow_run：监听「定时抓取」流程跑完的事件。
+# workflow_run 是在「某个流程运行结束」时触发的，与是谁触发的它无关，
+# 所以它不受上面那条限制。
+#
+# 另一个坑：workflow_run 会加载**默认分支**上的这份文件来执行。
+# 也就是说，改这个文件必须在合并进 main 之后才生效。
+# ============================================================
+
+# 流程名，显示在 Actions 页面
+name: 发布站点
+
+# 触发条件
+on:
+  # 推送到主干且改动了数据、代码或前端资源时重新发布。
+  # 限定路径是刻意的：改一个 README 不该触发一次部署。
+  push:
+    branches: [main]
+    paths:
+      - "data/**"          # 政策与变更数据
+      - "src/**"           # 生成器代码
+      - "site/**"          # 样式与检索脚本
+      - "schema/**"        # 结构契约（生成器会读它做校验相关的渲染）
+      - ".github/workflows/pages.yml"  # 本文件自身
+
+  # 定时抓取跑完后重新发布。
+  # 名称必须与 fetch.yml 里的 `name:` 完全一致，写错会静默不触发。
+  workflow_run:
+    workflows: ["定时抓取"]
+    types: [completed]
+
+  # 允许手动发布，便于调试与回滚到某个提交后重建
+  workflow_dispatch:
+
+# 权限：Pages 发布需要 pages:write 与 id-token:write。
+# 这是官方推荐的最小集合，不要图省事给 contents: write。
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只允许一个发布流程。
+# 与校验流程不同，这里**不能**取消进行中的任务——
+# 部署被中途打断可能让线上站点处于半完成状态。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # ----------------------------------------------------------
+  # 作业一：构建站点
+  # ----------------------------------------------------------
+  build:
+    name: 构建站点
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # 拉取仓库代码
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      # 安装 Python 并开启依赖缓存
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          # 与 validate.yml 的 quality 作业保持一致，便于共用缓存
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      # 生成站点只需要运行时依赖（PyYAML + jsonschema），不需要开发依赖
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e . --no-deps
+
+      # 生成站点。
+      # 注意这里显式指定 --output docs：虽然那也是默认值，
+      # 但 CI 里把「产物落在哪」写死在命令里，比依赖代码里的默认值更不容易被误改。
+      - name: 生成静态站点
+        run: finreg build-site --output docs
+
+      # 构建简报写进任务摘要，让「站点有多大、有几条记录」
+      # 在 Actions 页面上直接可见，不必点进日志
+      - name: 输出构建概览
+        run: |
+          {
+            echo "## 站点构建概览"
+            echo ""
+            echo "| 项目 | 数值 |"
+            echo "| --- | --- |"
+            echo "| 收录政策 | $(finreg list --json 2>/dev/null | python -c 'import json,sys; print(len(json.load(sys.stdin)))') |"
+            echo "| 构建产物 | $(du -sh docs | cut -f1) |"
+            echo "| 页面数 | $(find docs -name '*.html' | wc -l) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # 配置 Pages 环境，取得站点的基础地址等信息。
+      #
+      # 【为什么带 enablement: true】仓库若尚未把 Pages 的 Source 设成
+      # 「GitHub Actions」，configure-pages 会因为「取不到 Pages 站点」而直接失败。
+      # 默认行为要求人先去 Settings 里手动改一次设置——那是一个只在第一次
+      # 出现、之后就再也没有提示的隐形前置条件，换个人接手必然踩。
+      # 打开 enablement 后，首次运行会自己把 Source 设为 GitHub Actions，
+      # 整条链路变成「推上去就会自动发布」。
+      # 站点已启用时它是一个无副作用的空操作。
+      - name: 配置 Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      # 把 docs/ 打包成 Pages 产物。
+      # 关键：必须包含隐藏文件（我们生成了 .nojekyll），
+      # 这个 action 用 tar 打包，隐藏文件会被一并带上。
+      - name: 上传 Pages 产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  # ----------------------------------------------------------
+  # 作业二：部署到 Pages
+  # ----------------------------------------------------------
+  deploy:
+    name: 部署
+    # 必须等构建成功，否则会去部署一个残缺或空白的目录
+    needs: build
+    runs-on: ubuntu-latest
+    # 部署作业本身很轻，给一个短超时即可
+    timeout-minutes: 10
+    # 绑定到 github-pages 环境，Pages 的访问控制与部署历史都挂在这里
+    environment:
+      name: github-pages
+      # 把本次部署的站点地址暴露到任务摘要与 Actions 页面
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # 执行部署
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

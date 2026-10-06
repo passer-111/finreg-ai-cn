@@ -1,0 +1,1137 @@
+/* ============================================================
+ * 中国金融 AI 合规政策库 —— 站点样式
+ * ------------------------------------------------------------
+ * 设计原则（按重要性排序）：
+ *
+ * 1. **状态先于一切。** 使用者来这里问的第一个问题是「这条现在还有效吗」，
+ *    因此状态徽章是整站视觉权重最高的元素，其余一律退让。
+ * 2. **颜色是稀缺资源。** 只有需要读者立刻做判断的字段才配得上颜色
+ *    （有效性、待核验）；文件层级这类纯描述性信息一律中性灰。
+ *    所有字段都上色，等于所有字段都没有颜色。
+ * 3. **浅色 / 深色自适应。** 不引入主题切换开关，直接跟随系统。
+ *    知识库的使用场景多是长时间阅读，交给系统统一管理更少打扰。
+ * 4. **无外部依赖。** 不引字体 CDN、不引 CSS 框架。
+ *    这个站要能在十年后、任何网络环境下用浏览器打开就正常显示。
+ * ============================================================ */
+
+/* 全局变量：浅色为默认值 */
+:root {
+  /* 页面背景色 */
+  --bg: #ffffff;
+  /* 次级背景（卡片、面板） */
+  --bg-soft: #f7f7f5;
+  /* 三级背景（表头、代码块） */
+  --bg-sunk: #f0efec;
+  /* 主文字色 */
+  --fg: #1c1c1a;
+  /* 次级文字色 */
+  --fg-soft: #5f5e5a;
+  /* 弱化文字色（占位符、脚注） */
+  --fg-mute: #8a8880;
+  /* 边框色 */
+  --line: #e2e0da;
+  /* 主强调色（深青，用于链接与品牌） */
+  --accent: #0f6e56;
+  /* 强调色的浅底 */
+  --accent-soft: #e1f5ee;
+  /* 有效状态色 */
+  --ok: #0f6e56;
+  /* 有效状态的浅底 */
+  --ok-soft: #e1f5ee;
+  /* 待生效状态色 */
+  --pending: #185fa5;
+  /* 待生效状态的浅底 */
+  --pending-soft: #e6f1fb;
+  /* 已退出法律生命的颜色（用中性灰，不用红：废止不是错误，只是失效） */
+  --dead: #77756f;
+  /* 已失效的浅底 */
+  --dead-soft: #f0efec;
+  /* 需要人介入的颜色（状态待核验） */
+  --warn: #a32d2d;
+  /* 需要人介入的浅底 */
+  --warn-soft: #fcebeb;
+  /* 圆角 */
+  --radius: 10px;
+  /* 内容区最大宽度 */
+  --wrap: 980px;
+}
+
+/* 深色模式：跟随系统设置 */
+@media (prefers-color-scheme: dark) {
+  /* 覆盖全部颜色变量 */
+  :root {
+    /* 页面背景改为深色 */
+    --bg: #16171a;
+    /* 次级背景 */
+    --bg-soft: #1e2024;
+    /* 三级背景 */
+    --bg-sunk: #24262b;
+    /* 主文字改为浅色，保证深色底上的可读性 */
+    --fg: #e8e8e4;
+    /* 次级文字 */
+    --fg-soft: #b4b2a9;
+    /* 弱化文字 */
+    --fg-mute: #8a8880;
+    /* 边框 */
+    --line: #34363c;
+    /* 主强调色提亮，否则在深色底上对比度不足 */
+    --accent: #5dcaa5;
+    /* 强调色浅底改为深色系 */
+    --accent-soft: #16352c;
+    /* 有效状态色提亮 */
+    --ok: #5dcaa5;
+    /* 有效状态底 */
+    --ok-soft: #16352c;
+    /* 待生效状态色提亮 */
+    --pending: #85b7eb;
+    /* 待生效状态底 */
+    --pending-soft: #14283c;
+    /* 失效状态色 */
+    --dead: #9a9891;
+    /* 失效状态底 */
+    --dead-soft: #24262b;
+    /* 警示色提亮 */
+    --warn: #f09595;
+    /* 警示状态底 */
+    --warn-soft: #3a1c1c;
+  }
+}
+
+/* 去掉浏览器默认边距，并显式声明行高与字体 */
+* {
+  /* 统一盒模型，避免 width 与 padding 相加超出预期 */
+  box-sizing: border-box;
+}
+
+/* 正文基础样式 */
+body {
+  /* 清掉默认外边距 */
+  margin: 0;
+  /* 背景色 */
+  background: var(--bg);
+  /* 文字色 */
+  color: var(--fg);
+  /* 字体族：优先系统中文字体，保证中文不会退化成宋体衬线 */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", sans-serif;
+  /* 字号：13px 在中文屏幕上偏小，正文用 15px */
+  font-size: 15px;
+  /* 行高：中文需要比西文更大，1.7 是舒适阅读的下限 */
+  line-height: 1.7;
+}
+
+/* 内容容器：统一左右边距与最大宽度 */
+.wrap {
+  /* 最大宽度，超过则居中，避免长行伤眼 */
+  max-width: var(--wrap);
+  /* 水平居中 */
+  margin: 0 auto;
+  /* 内边距 */
+  padding: 0 20px;
+}
+
+/* 链接样式 */
+a {
+  /* 使用强调色 */
+  color: var(--accent);
+  /* 去掉默认下划线，改用 hover 时再现，减少文字噪声 */
+  text-decoration: none;
+}
+
+/* 链接悬停 */
+a:hover {
+  /* 悬停时出现下划线，提供明确的交互反馈 */
+  text-decoration: underline;
+}
+
+/* 代码与等宽内容 */
+code {
+  /* 等宽字体族 */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* 字号略小，使等宽字与正文视觉重量相当 */
+  font-size: 0.88em;
+  /* 浅底衬托 */
+  background: var(--bg-sunk);
+  /* 内边距 */
+  padding: 1px 5px;
+  /* 圆角 */
+  border-radius: 4px;
+}
+
+/* ============================================================
+ * 页头
+ * ============================================================ */
+
+/* 站点页头 */
+.site-header {
+  /* 底部分隔线 */
+  border-bottom: 1px solid var(--line);
+  /* 内边距 */
+  padding: 16px 0;
+  /* 黏性定位：长列表页滚动时导航始终可见 */
+  position: sticky;
+  /* 贴在顶部 */
+  top: 0;
+  /* 背景必须不透明，否则滚动时下方内容会透出来 */
+  background: var(--bg);
+  /* 层级抬高，盖住卡片 */
+  z-index: 10;
+}
+
+/* 页头内部用弹性布局 */
+.site-header .wrap {
+  /* 横向排列 */
+  display: flex;
+  /* 垂直居中 */
+  align-items: baseline;
+  /* 元素间距 */
+  gap: 14px;
+  /* 窄屏时允许换行 */
+  flex-wrap: wrap;
+}
+
+/* 品牌名 */
+.brand {
+  /* 加大字号 */
+  font-size: 17px;
+  /* 加粗 */
+  font-weight: 600;
+  /* 用主文字色而非链接色：它是页面标识，不是待点击的链接 */
+  color: var(--fg);
+}
+
+/* 副标题 */
+.tagline {
+  /* 次级文字色 */
+  color: var(--fg-mute);
+  /* 小字号 */
+  font-size: 13px;
+}
+
+/* 导航区 */
+.site-nav {
+  /* 推到右侧 */
+  margin-left: auto;
+  /* 横向排列 */
+  display: flex;
+  /* 间距 */
+  gap: 16px;
+  /* 小字号 */
+  font-size: 14px;
+}
+
+/* ============================================================
+ * 主体区块
+ * ============================================================ */
+
+/* 主内容区上边距 */
+main {
+  /* 与页头拉开距离 */
+  padding-top: 28px;
+  /* 与页脚拉开距离 */
+  padding-bottom: 48px;
+}
+
+/* 首页头部区块 */
+.hero {
+  /* 底部留白 */
+  padding-bottom: 8px;
+}
+
+/* 一级标题 */
+h1 {
+  /* 字号 */
+  font-size: 26px;
+  /* 行高收紧，标题不需要大字距 */
+  line-height: 1.35;
+  /* 上边距 */
+  margin: 0 0 10px;
+  /* 字重 */
+  font-weight: 600;
+}
+
+/* 二级标题 */
+h2 {
+  /* 字号 */
+  font-size: 18px;
+  /* 外边距 */
+  margin: 0 0 12px;
+  /* 字重 */
+  font-weight: 600;
+}
+
+/* 三级标题 */
+h3 {
+  /* 字号 */
+  font-size: 15px;
+  /* 上边距拉开，与上一块内容区分 */
+  margin: 22px 0 8px;
+  /* 字重 */
+  font-weight: 600;
+}
+
+/* 引导语：比正文略大，用于首页与列表页的开头说明 */
+.lede {
+  /* 字号 */
+  font-size: 16px;
+  /* 次级文字色，弱于标题强于正文 */
+  color: var(--fg-soft);
+  /* 下边距 */
+  margin: 0 0 20px;
+}
+
+/* 弱化文字 */
+.muted {
+  /* 弱化色 */
+  color: var(--fg-mute);
+  /* 小字号 */
+  font-size: 13px;
+}
+
+/* 警示文字 */
+.warn-text {
+  /* 警示色 */
+  color: var(--warn);
+  /* 加粗以突出 */
+  font-weight: 600;
+}
+
+/* 分隔符 */
+.sep {
+  /* 左右留白 */
+  margin: 0 6px;
+  /* 弱化 */
+  color: var(--fg-mute);
+}
+
+/* 分隔线 */
+hr {
+  /* 去掉默认立体边框，改为细实线 */
+  border: none;
+  /* 只保留下边框 */
+  border-top: 1px solid var(--line);
+  /* 上下留白 */
+  margin: 28px 0;
+}
+
+/* ============================================================
+ * 统计条
+ * ============================================================ */
+
+/* 统计条容器 */
+.stats {
+  /* 弹性布局 */
+  display: flex;
+  /* 窄屏换行 */
+  flex-wrap: wrap;
+  /* 间距 */
+  gap: 12px;
+  /* 上下留白 */
+  margin: 20px 0 28px;
+}
+
+/* 单个统计卡片 */
+.stat {
+  /* 背景 */
+  background: var(--bg-soft);
+  /* 边框 */
+  border: 1px solid var(--line);
+  /* 圆角 */
+  border-radius: var(--radius);
+  /* 内边距 */
+  padding: 12px 18px;
+  /* 纵向排列数字与标签 */
+  display: flex;
+  /* 纵向 */
+  flex-direction: column;
+  /* 最小宽度，保证四个卡片视觉均衡 */
+  min-width: 110px;
+}
+
+/* 「状态待核验」这一格在非零时着色：它是最该被看见的坏数字 */
+.stat-warn {
+  /* 警示浅底 */
+  background: var(--warn-soft);
+  /* 警示色边框 */
+  border-color: var(--warn);
+}
+
+/* 统计数字 */
+.stat-num {
+  /* 字号明显大于标签 */
+  font-size: 24px;
+  /* 字重 */
+  font-weight: 600;
+  /* 行高收紧 */
+  line-height: 1.2;
+}
+
+/* 统计标签 */
+.stat-label {
+  /* 小字号 */
+  font-size: 13px;
+  /* 弱化色 */
+  color: var(--fg-soft);
+}
+
+/* ============================================================
+ * 面板
+ * ============================================================ */
+
+/* 面板：把一组相关内容框起来 */
+.panel {
+  /* 浅底 */
+  background: var(--bg-soft);
+  /* 边框 */
+  border: 1px solid var(--line);
+  /* 圆角 */
+  border-radius: var(--radius);
+  /* 内边距 */
+  padding: 20px;
+  /* 下边距 */
+  margin-bottom: 24px;
+}
+
+/* 详情页的内容块 */
+.block {
+  /* 上边距，与上一块拉开 */
+  margin-top: 32px;
+  /* 上边框，形成分隔 */
+  border-top: 1px solid var(--line);
+  /* 上内边距 */
+  padding-top: 20px;
+}
+
+/* 警告块：用于变更文件损坏等需要人处理的情况 */
+.block-warn {
+  /* 警示浅底 */
+  background: var(--warn-soft);
+  /* 警示边框 */
+  border: 1px solid var(--warn);
+  /* 圆角 */
+  border-radius: var(--radius);
+  /* 内边距 */
+  padding: 16px 20px;
+  /* 上边距 */
+  margin-top: 24px;
+}
+
+/* ============================================================
+ * 筛选器
+ * ============================================================ */
+
+/* 筛选区：弹性排列 */
+.filters {
+  /* 横向排列 */
+  display: flex;
+  /* 窄屏换行 */
+  flex-wrap: wrap;
+  /* 间距 */
+  gap: 10px;
+  /* 下边距 */
+  margin-bottom: 10px;
+}
+
+/* 搜索框 */
+.search {
+  /* 占据剩余宽度 */
+  flex: 1 1 260px;
+  /* 内边距 */
+  padding: 9px 12px;
+  /* 边框 */
+  border: 1px solid var(--line);
+  /* 圆角 */
+  border-radius: 8px;
+  /* 背景与页面一致，避免深色模式下露出白底 */
+  background: var(--bg);
+  /* 文字色跟随主题 */
+  color: var(--fg);
+  /* 字号 */
+  font-size: 14px;
+  /* 继承字体族，否则搜索框会退回浏览器默认字体 */
+  font-family: inherit;
+}
+
+/* 下拉选择框 */
+.filters select {
+  /* 内边距 */
+  padding: 9px 10px;
+  /* 边框 */
+  border: 1px solid var(--line);
+  /* 圆角 */
+  border-radius: 8px;
+  /* 背景 */
+  background: var(--bg);
+  /* 文字色 */
+  color: var(--fg);
+  /* 字号 */
+  font-size: 14px;
+  /* 字体族 */
+  font-family: inherit;
+  /* 最大宽度，防止长机构名把布局撑开 */
+  max-width: 240px;
+}
+
+/* 重置按钮 */
+.reset {
+  /* 内边距 */
+  padding: 9px 14px;
+  /* 边框 */
+  border: 1px solid var(--line);
+  /* 圆角 */
+  border-radius: 8px;
+  /* 背景 */
+  background: var(--bg);
+  /* 文字色 */
+  color: var(--fg-soft);
+  /* 字号 */
+  font-size: 14px;
+  /* 字体族 */
+  font-family: inherit;
+  /* 鼠标指针 */
+  cursor: pointer;
+}
+
+/* 结果计数行 */
+.result-line {
+  /* 上边距 */
+  margin: 6px 0 16px;
+  /* 弱化 */
+  color: var(--fg-mute);
+  /* 小字号 */
+  font-size: 13px;
+}
+
+/* ============================================================
+ * 政策卡片
+ * ============================================================ */
+
+/* 卡片列表容器 */
+.cards {
+  /* 纵向排列 */
+  display: flex;
+  /* 纵向 */
+  flex-direction: column;
+  /* 卡片间距 */
+  gap: 12px;
+}
+
+/* 单张卡片 */
+.card {
+  /* 浅底 */
+  background: var(--bg-soft);
+  /* 边框 */
+  border: 1px solid var(--line);
+  /* 圆角 */
+  border-radius: var(--radius);
+  /* 内边距 */
+  padding: 16px 18px;
+}
+
+/* 卡片标题行：标题与状态徽章分居左右 */
+.card-head {
+  /* 弹性布局 */
+  display: flex;
+  /* 垂直居中 */
+  align-items: center;
+  /* 两端对齐 */
+  justify-content: space-between;
+  /* 间距 */
+  gap: 12px;
+}
+
+/* 卡片内的标题 */
+.card-head h3 {
+  /* 清掉 block 继承来的上边距 */
+  margin: 0;
+  /* 字号 */
+  font-size: 16px;
+  /* 行高 */
+  line-height: 1.45;
+}
+
+/* 卡片内的标题链接：用主文字色，避免整张标题变蓝 */
+.card-head h3 a {
+  /* 主文字色 */
+  color: var(--fg);
+}
+
+/* 卡片元信息行 */
+.card-meta {
+  /* 外边距 */
+  margin: 6px 0 4px;
+  /* 次级色 */
+  color: var(--fg-soft);
+  /* 字号 */
+  font-size: 13px;
+}
+
+/* 卡片日期行 */
+.card-dates {
+  /* 外边距 */
+  margin: 0 0 8px;
+  /* 弱化色 */
+  color: var(--fg-mute);
+  /* 字号 */
+  font-size: 13px;
+}
+
+/* 卡片标签行 */
+.card-chips {
+  /* 外边距 */
+  margin: 0 0 8px;
+  /* 弹性排列 */
+  display: flex;
+  /* 换行 */
+  flex-wrap: wrap;
+  /* 间距 */
+  gap: 6px;
+  /* 垂直居中 */
+  align-items: center;
+}
+
+/* 卡片底部 */
+.card-foot {
+  /* 外边距 */
+  margin: 0;
+  /* 弹性布局，把官方链接推到右侧 */
+  display: flex;
+  /* 两端对齐 */
+  justify-content: space-between;
+  /* 间距 */
+  gap: 12px;
+  /* 换行 */
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+ * 徽章与圆片
+ * ============================================================ */
+
+/* 徽章基础样式 */
+.badge {
+  /* 行内块，使其能带内边距而不破坏行流 */
+  display: inline-block;
+  /* 内边距 */
+  padding: 2px 9px;
+  /* 圆角 */
+  border-radius: 999px;
+  /* 小字号 */
+  font-size: 12px;
+  /* 中等字重 */
+  font-weight: 500;
+  /* 不换行，否则「已公布未生效」会被拆成两行 */
+  white-space: nowrap;
+  /* 默认中性色 */
+  background: var(--bg-sunk);
+  /* 默认中性文字色 */
+  color: var(--fg-soft);
+}
+
+/* 有效状态徽章 */
+.badge-ok {
+  /* 有效色浅底 */
+  background: var(--ok-soft);
+  /* 有效色文字 */
+  color: var(--ok);
+}
+
+/* 待生效状态徽章 */
+.badge-pending {
+  /* 待生效浅底 */
+  background: var(--pending-soft);
+  /* 待生效文字色 */
+  color: var(--pending);
+}
+
+/* 已失效状态徽章 */
+.badge-dead {
+  /* 中性浅底 */
+  background: var(--dead-soft);
+  /* 中性文字色 */
+  color: var(--dead);
+}
+
+/* 需人工介入的徽章 */
+.badge-warn {
+  /* 警示浅底 */
+  background: var(--warn-soft);
+  /* 警示文字色 */
+  color: var(--warn);
+}
+
+/* 中性徽章：用于文件层级、变更类型这类纯描述性信息 */
+.badge-quiet {
+  /* 与默认样式相同，显式声明是为了让调用处的意图可读 */
+  background: var(--bg-sunk);
+  /* 中性文字 */
+  color: var(--fg-soft);
+}
+
+/* 标签圆片 */
+.chip {
+  /* 行内块 */
+  display: inline-block;
+  /* 内边距 */
+  padding: 1px 8px;
+  /* 圆角 */
+  border-radius: 6px;
+  /* 小字号 */
+  font-size: 12px;
+  /* 浅底 */
+  background: var(--bg-sunk);
+  /* 次级文字色 */
+  color: var(--fg-soft);
+  /* 右间距 */
+  margin-right: 4px;
+}
+
+/* 引用型圆片（政策 id）：用等宽字体，因为它们是机器标识符 */
+.chip.ref {
+  /* 等宽字体 */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* 强调浅底，与普通标签区分 */
+  background: var(--accent-soft);
+  /* 强调色文字 */
+  color: var(--accent);
+}
+
+/* ============================================================
+ * 详情页
+ * ============================================================ */
+
+/* 面包屑 */
+.breadcrumb {
+  /* 下边距 */
+  margin-bottom: 14px;
+  /* 小字号 */
+  font-size: 13px;
+}
+
+/* 详情页标题行 */
+.detail-title {
+  /* 弹性布局：标题与状态徽章同排 */
+  display: flex;
+  /* 顶部对齐 */
+  align-items: flex-start;
+  /* 间距 */
+  gap: 14px;
+  /* 换行 */
+  flex-wrap: wrap;
+}
+
+/* 详情页标题内的 h1 */
+.detail-title h1 {
+  /* 清掉外边距，由父容器控制 */
+  margin: 0;
+  /* 占据剩余宽度，使徽章贴右 */
+  flex: 1 1 auto;
+}
+
+/* 详情页副标题（发布机构） */
+.detail-sub {
+  /* 上边距 */
+  margin: 8px 0 0;
+  /* 次级文字色 */
+  color: var(--fg-soft);
+  /* 字号 */
+  font-size: 14px;
+}
+
+/* ============================================================
+ * 表格
+ * ============================================================ */
+
+/* 元信息表格 */
+.meta {
+  /* 全宽 */
+  width: 100%;
+  /* 合并边框 */
+  border-collapse: collapse;
+  /* 字号 */
+  font-size: 14px;
+}
+
+/* 表格行分隔线 */
+.meta tr {
+  /* 下边框 */
+  border-bottom: 1px solid var(--line);
+}
+
+/* 表头单元格（此处用作左侧的字段名） */
+.meta th {
+  /* 左对齐 */
+  text-align: left;
+  /* 不换行，保证字段名整齐 */
+  white-space: nowrap;
+  /* 顶部对齐，值多行时字段名仍贴顶 */
+  vertical-align: top;
+  /* 内边距 */
+  padding: 8px 16px 8px 0;
+  /* 宽度限制，避免字段名列吃掉太多 */
+  width: 130px;
+  /* 次级文字色 */
+  color: var(--fg-soft);
+  /* 中等字重 */
+  font-weight: 500;
+}
+
+/* 值单元格 */
+.meta td {
+  /* 内边距 */
+  padding: 8px 0;
+  /* 允许长 URL 换行，否则会撑破布局 */
+  word-break: break-word;
+}
+
+/* 哈希值：可能是 71 字符的长串 */
+.hash {
+  /* 允许在任意位置换行 */
+  word-break: break-all;
+  /* 小字号 */
+  font-size: 12px;
+}
+
+/* ============================================================
+ * 版本链时间轴
+ * ============================================================ */
+
+/* 时间轴容器 */
+.timeline {
+  /* 去掉默认列表样式 */
+  list-style: none;
+  /* 内边距 */
+  padding: 0 0 0 18px;
+  /* 外边距 */
+  margin: 0;
+  /* 左侧竖线，用 border 实现比伪元素更少惊喜 */
+  border-left: 2px solid var(--line);
+}
+
+/* 单个版本节点 */
+.timeline li {
+  /* 上边距 */
+  margin: 0 0 18px;
+  /* 相对定位，供圆点定位 */
+  position: relative;
+}
+
+/* 版本节点的圆点 */
+.timeline li::before {
+  /* 必须有 content 才渲染伪元素 */
+  content: "";
+  /* 绝对定位到竖线上 */
+  position: absolute;
+  /* 左移到竖线中心；-18px 是 padding，-5px 是半径补偿 */
+  left: -27px;
+  /* 与首行文字垂直对齐 */
+  top: 8px;
+  /* 圆点尺寸 */
+  width: 8px;
+  /* 高度与宽度相等才是圆 */
+  height: 8px;
+  /* 圆形 */
+  border-radius: 50%;
+  /* 用强调色填充，使节点在浅色背景上可见 */
+  background: var(--accent);
+}
+
+/* 版本头部行 */
+.tl-head {
+  /* 弹性布局 */
+  display: flex;
+  /* 垂直居中 */
+  align-items: center;
+  /* 间距 */
+  gap: 8px;
+  /* 换行 */
+  flex-wrap: wrap;
+}
+
+/* 版本号 */
+.tl-version {
+  /* 等宽字体，与政策 id 的视觉语言一致 */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* 加粗 */
+  font-weight: 600;
+  /* 字号 */
+  font-size: 14px;
+}
+
+/* 版本说明 */
+.tl-note {
+  /* 外边距 */
+  margin: 4px 0 2px;
+  /* 字号 */
+  font-size: 14px;
+}
+
+/* ============================================================
+ * 义务清单
+ * ============================================================ */
+
+/* 义务列表 */
+.obligations {
+  /* 去掉默认样式 */
+  list-style: none;
+  /* 内边距 */
+  padding: 0;
+  /* 外边距 */
+  margin: 0;
+}
+
+/* 单条义务 */
+.obligation {
+  /* 浅底 */
+  background: var(--bg-soft);
+  /* 边框 */
+  border: 1px solid var(--line);
+  /* 左侧强调边：视觉上标出「这是本项目的增值内容」 */
+  border-left: 3px solid var(--accent);
+  /* 圆角 */
+  border-radius: 8px;
+  /* 内边距 */
+  padding: 12px 16px;
+  /* 下间距 */
+  margin-bottom: 10px;
+}
+
+/* 义务的条款定位行 */
+.obligation-clause {
+  /* 小字号 */
+  font-size: 13px;
+  /* 次级色 */
+  color: var(--fg-soft);
+  /* 下间距 */
+  margin-bottom: 4px;
+}
+
+/* 义务内容 */
+.obligation-summary {
+  /* 字号与正文一致 */
+  font-size: 15px;
+  /* 下间距 */
+  margin-bottom: 6px;
+}
+
+/* 义务标签行 */
+.obligation-tags {
+  /* 弹性排列 */
+  display: flex;
+  /* 换行 */
+  flex-wrap: wrap;
+  /* 间距 */
+  gap: 4px;
+}
+
+/* ============================================================
+ * 其它块
+ * ============================================================ */
+
+/* 可折叠的适用主体 */
+.applicable {
+  /* 光标提示可点击 */
+  cursor: pointer;
+}
+
+/* 折叠标题 */
+.applicable summary {
+  /* 强调色，提示这是可展开的 */
+  color: var(--accent);
+  /* 字号 */
+  font-size: 14px;
+}
+
+/* 折叠展开后的列表 */
+.applicable ul {
+  /* 内边距 */
+  padding-left: 20px;
+  /* 外边距 */
+  margin: 6px 0 0;
+  /* 字号 */
+  font-size: 14px;
+}
+
+/* 核验台账块 */
+.ledger {
+  /* 浅底 */
+  background: var(--bg-soft);
+  /* 边框 */
+  border: 1px solid var(--line);
+  /* 圆角 */
+  border-radius: var(--radius);
+  /* 内边距 */
+  padding: 14px 18px;
+}
+
+/* 台账内段落 */
+.ledger p {
+  /* 外边距 */
+  margin: 0 0 8px;
+  /* 字号 */
+  font-size: 14px;
+}
+
+/* 台账说明文字 */
+.ledger-note {
+  /* 次级色 */
+  color: var(--fg-soft);
+  /* 字号 */
+  font-size: 14px;
+  /* 行高，说明通常较长 */
+  line-height: 1.75;
+}
+
+/* 备注块 */
+.notes {
+  /* 字号 */
+  font-size: 14px;
+  /* 行高 */
+  line-height: 1.8;
+  /* 次级色 */
+  color: var(--fg-soft);
+  /* 保留换行，备注里常有分段 */
+  white-space: pre-wrap;
+}
+
+/* 关联文件行 */
+.ref-line {
+  /* 外边距 */
+  margin: 0 0 6px;
+  /* 字号 */
+  font-size: 14px;
+}
+
+/* 空状态 */
+.empty {
+  /* 内边距 */
+  padding: 32px 0;
+  /* 居中 */
+  text-align: center;
+  /* 弱化色 */
+  color: var(--fg-mute);
+}
+
+/* 变更条目列表 */
+.changes {
+  /* 去掉默认样式 */
+  list-style: none;
+  /* 内边距 */
+  padding: 0;
+  /* 外边距 */
+  margin: 0;
+}
+
+/* 单条变更 */
+.change {
+  /* 下边框分隔 */
+  border-bottom: 1px solid var(--line);
+  /* 下内边距 */
+  padding-bottom: 12px;
+  /* 下外边距 */
+  margin-bottom: 12px;
+}
+
+/* 变更头部行 */
+.change-head {
+  /* 弹性布局 */
+  display: flex;
+  /* 垂直居中 */
+  align-items: center;
+  /* 间距 */
+  gap: 8px;
+  /* 换行 */
+  flex-wrap: wrap;
+}
+
+/* 变更标题 */
+.change-title {
+  /* 上间距 */
+  margin-top: 4px;
+  /* 字号 */
+  font-size: 15px;
+}
+
+/* 变更明细 */
+.change-detail {
+  /* 字号 */
+  font-size: 13px;
+}
+
+/* 变更底部 */
+.change-foot {
+  /* 字号 */
+  font-size: 13px;
+}
+
+/* ============================================================
+ * 页脚
+ * ============================================================ */
+
+/* 站点页脚 */
+.site-footer {
+  /* 上边框 */
+  border-top: 1px solid var(--line);
+  /* 内边距 */
+  padding: 20px 0 32px;
+  /* 浅底 */
+  background: var(--bg-soft);
+}
+
+/* 免责声明 */
+.disclaimer {
+  /* 字号 */
+  font-size: 13px;
+  /* 次级色 */
+  color: var(--fg-soft);
+  /* 行高 */
+  line-height: 1.7;
+  /* 下边距 */
+  margin: 0 0 8px;
+}
+
+/* ============================================================
+ * 窄屏适配
+ * ============================================================ */
+
+/* 屏幕宽度小于 640px 时的调整 */
+@media (max-width: 640px) {
+  /* 缩小一级标题 */
+  h1 {
+    /* 字号 */
+    font-size: 21px;
+  }
+
+  /* 统计卡片两列排布 */
+  .stat {
+    /* 允许收缩 */
+    flex: 1 1 calc(50% - 12px);
+    /* 最小宽度取消，交给 flex 计算 */
+    min-width: 0;
+  }
+
+  /* 元信息表的字段名一栏收窄 */
+  .meta th {
+    /* 宽度 */
+    width: 92px;
+    /* 字号 */
+    font-size: 13px;
+  }
+
+  /* 筛选控件占满整行 */
+  .filters select,
+  .filters .search {
+    /* 全宽 */
+    width: 100%;
+    /* 取消最大宽度限制 */
+    max-width: none;
+  }
+
+  /* 页头导航换到下一行 */
+  .site-nav {
+    /* 取消右推 */
+    margin-left: 0;
+    /* 全宽 */
+    width: 100%;
+  }
+}
