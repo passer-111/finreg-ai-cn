@@ -42,10 +42,10 @@ from typing import Any
 # 导入本包各模块
 # 注意：这里只导入实际用到的名字。看似「多导入几个备用」很方便，
 # 但会让读者无法判断某个符号是否真的被使用，也掩盖了死代码。
-from finreg_ai.diff import Change, ChangeSet, diff_discovered
+from finreg_ai.diff import Change, ChangeSet, detect_policy_changes, diff_discovered
 from finreg_ai.fetchers import build_fetcher, now_china_iso, today_china
 from finreg_ai.fetchers.base import FetchResult
-from finreg_ai.models import Source, is_warning, strip_warning_prefix
+from finreg_ai.models import Policy, Source, is_warning, strip_warning_prefix
 from finreg_ai.store import (
     CHANGES_DIR,                        # 变更流输出目录
     find_stale_policies,                # 陈旧记录查找
@@ -297,6 +297,42 @@ def load_previously_discovered_urls(directory: Path | None = None) -> set[str]:
     return urls
 
 
+def detect_baseline_changes(
+    baseline_dir: Path, policies: dict[str, Policy], today: date
+) -> tuple[list[Change], list[str]]:
+    """以基准目录中的旧版政策记录为对比基准，检测记录级变更。
+
+    为什么基准必须来自外部目录
+    --------------------------
+    抓取本身绝不修改 ``data/policies/``（机器发现、人认定），
+    因此「旧版本」只能从流水线之外取得——CI 在抓取前从 git 历史导出，
+    通过 ``finreg fetch --baseline`` 传入。没有这个注入点，
+    ``diff.detect_policy_changes`` 就永远无法在真实运行中被调用，
+    变更流里也就永远没有记录级的变更事件（新增 / 状态 / 内容）。
+
+    返回 ``(变更列表, 基准加载错误)``。基准记录的加载错误都加上
+    「基准记录」前缀：与当前记录的错误混在一个列表里时，
+    没有前缀就无法判断该去修哪一份数据。
+
+    为什么只上报错误级问题、丢弃警告级
+    ----------------------------------
+    基准记录通常与当前记录是同一份数据（CI 从 git HEAD 导出），
+    它的语义警告（如「尚未经人工核验」）当前记录那边已经报过一遍，
+    再报一次会让报告里的警告数翻倍——告警一多，人就会习惯性忽略。
+    而**错误**（文件损坏、schema 不符）意味着这条基准记录根本没参与比对，
+    它的差异在静默中丢失，必须报出。
+    """
+    # 加载旧版记录（复用与当前记录完全相同的加载与校验路径，
+    # 保证「旧版本」与「新版本」的判定口径一致）
+    old_policies, errors = load_all_policies(baseline_dir)
+    # 只保留错误级问题并加上来源前缀（警告级与当前记录重复，见 docstring）
+    prefixed = [f"基准记录：{error}" for error in errors if not is_warning(error)]
+    # 执行检测（新增 / 状态变更 / 内容与元数据变更 / 陈旧告警）
+    changes = detect_policy_changes(old_policies, policies, today)
+    # 返回检测结果与基准加载错误
+    return changes, prefixed
+
+
 def change_identity(change: Change) -> tuple[str, str, str]:
     """返回一条变更的自然键，用于判断「这是不是同一条变更」。
 
@@ -486,12 +522,16 @@ def run_pipeline(
     today: date | None = None,
     write_changes: bool = True,
     force: bool = False,
+    baseline_dir: Path | None = None,
 ) -> PipelineReport:
     """执行完整流水线，返回报告。
 
     参数 today 允许注入固定日期以便测试；
     参数 write_changes 控制是否落盘变更流文件（测试时可关）；
     参数 force 允许运行 `enabled: false` 的源（见 fetch_all 的说明）。
+    参数 baseline_dir 指向「旧版本」政策记录目录，提供时启用记录级
+    变更检测（新增 / 状态 / 内容 / 陈旧），缺省时跳过——
+    基准由 CI 在抓取前从 git 历史导出（见 ``.github/workflows/fetch.yml``）。
 
     注意 force 与「是否写变更流」是两个独立开关。按需运行罚单这类
     高产出的源时，通常希望 **force=True 且 write_changes=False**：
@@ -539,16 +579,29 @@ def run_pipeline(
     # 只有前者时，一条尚未人工录入的发现会在每天的变更流里反复出现，
     # 变更流被同一个待办事项的复读淹没（见 load_previously_discovered_urls）。
     known_urls = {p.source.url for p in policies.values()} | load_previously_discovered_urls()
-    # 检测已有记录之间的变更（需要一个「旧版本」作对比基准；
-    # 此处以磁盘上的当前状态作为新版本，旧版本由 CI 从 git 历史取得，
-    # 在没有 git 上下文时跳过这一步）
-    # 这里先只处理「发现新条目」这一类变更
+
+    # 记录级变更检测：有基准目录时执行，没有时跳过。
+    # 抓取本身绝不修改 data/policies/，「旧版本」只能由外部注入
+    # （CI 在抓取前从 git 历史导出，经 finreg fetch --baseline 传入）。
+    # 在本地直接跑 finreg fetch 不带 --baseline 时跳过这一步，
+    # 与此前「没有 git 上下文就不做记录级检测」的行为保持一致。
+    detected: list[Change] = []
+    # 仅在提供基准时检测
+    if baseline_dir is not None:
+        # 检测并收集基准加载错误（带「基准记录」前缀）
+        detected, baseline_errors = detect_baseline_changes(baseline_dir, policies, run_on)
+        # 记入报告但不中断——基准有问题不该阻止发现新条目
+        report.validation_errors.extend(baseline_errors)
+
+    # 发现新条目（机器发现，等待人工认定）
     discovered = diff_discovered(all_docs, known_urls, run_on)
 
     # 构造变更集合
     change_set = ChangeSet(
         detected_on=run_on,                                                       # 检测日期
-        changes=discovered,                                                       # 变更列表
+        # 记录级变更（新增/状态/内容）排在发现条目之前：
+        # 前者直接关联已录入记录，行动性更强，应先在变更流里被看到
+        changes=detected + discovered,                                            # 变更列表
         policies_scanned=len(policies),                                           # 扫描政策数
         failed_sources=report.failed_sources,                                     # 失败源列表
     )

@@ -148,6 +148,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="连 enabled: false 的源一并抓取。用于按需拉取「刻意不放进每日流水线」的源"
              "（如行政处罚公示——它每次产出数百条，进了变更流会淹没真正的政策变化）",  # 说明
     )
+    # 记录级变更检测的基准目录
+    fetch_parser.add_argument(
+        "--baseline",                   # 参数名
+        type=Path,                      # 转成 Path
+        default=None,                   # 默认不启用记录级检测
+        metavar="DIR",                  # 占位符
+        help="以指定目录中的政策记录作为旧版本，检测记录级变更（新增/状态/内容/陈旧）。"
+             "CI 在抓取前从 git 历史导出后传入；不指定时跳过记录级检测",  # 说明
+    )
 
     # ------------------------------------------------------------
     # validate：校验数据完整性
@@ -447,6 +456,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         source_ids=args.sources,            # 指定的源列表（可能为 None）
         write_changes=not args.dry_run,     # dry-run 时不写文件
         force=args.force,                   # --force 时连停用的源一并抓
+        baseline_dir=args.baseline,         # --baseline 提供时启用记录级变更检测
     )
 
     # JSON 输出模式

@@ -106,6 +106,23 @@ jobs:
           python -m pip install -e . --no-deps
 
       # --------------------------------------------------------
+      # 第 0 步：导出旧版政策记录，作为记录级变更检测的基准
+      # --------------------------------------------------------
+      # diff.detect_policy_changes 需要一个「旧版本」作对比基准，
+      # 而抓取本身绝不修改 data/policies/（机器发现、人认定），
+      # 因此基准只能从 git 历史导出。
+      # 基准与当前工作区一致时，检测只产出陈旧告警（超过 180 天未核验）；
+      # 人工在两个抓取周期之间更新过记录时，即可产出
+      # 新增 / 状态 / 内容 级别的变更事件。
+      - name: 导出旧版政策记录
+        run: |
+          set -euo pipefail
+          # 基准目录放在运行器临时目录，避免污染工作区
+          mkdir -p "$RUNNER_TEMP/baseline"
+          # 以 tar 流导出 HEAD 的 data/policies，保持目录结构
+          git archive HEAD data/policies | tar -x -C "$RUNNER_TEMP/baseline"
+
+      # --------------------------------------------------------
       # 第 1 步：执行抓取
       # --------------------------------------------------------
       # 【重要提醒】本步骤依赖 GitHub 运行器能访问中国政府网站。
@@ -120,8 +137,9 @@ jobs:
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          # 基础参数：输出 JSON 便于后续步骤解析
-          args=(fetch --json)
+          # 基础参数：输出 JSON 便于后续步骤解析；
+          # --baseline 指向第 0 步导出的旧版记录，启用记录级变更检测
+          args=(fetch --json --baseline "$RUNNER_TEMP/baseline/data/policies")
           # 指定了源则只抓该源
           if [ -n "${INPUT_SOURCE:-}" ]; then
             args+=(--source "$INPUT_SOURCE")
