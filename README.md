@@ -332,18 +332,58 @@ $ finreg list --effective-only
 
 ## 对外展示：静态站点
 
-站点是 **git 数据的一个视图**，不是一个独立的应用。
+`docs/` 是 `data/` 的一个只读视图：把政策、变更流与版本链渲染成一个
+可公开访问的网站。站点没有自己的数据——页面上的每个字都能回溯到 `data/` 里的某条记录。
+线上地址：https://passer-111.github.io/finreg-ai-cn/
 
-```bash
-finreg build-site                              # 生成到 docs/
-finreg build-site --output /tmp/site-preview   # 换个位置，随手可删
+### 技术栈
 
-# 本地预览。必须走 HTTP：直接 file:// 打开会让相对路径与脚本行为不一致
-cd docs && python -m http.server 8000
+- **生成器**：Python（`src/finreg_ai/site.py`，命令 `finreg build-site`）
+- **前端**：手写 HTML / CSS / JS（`site/assets/`），无框架、无 npm、无 CDN、无构建步骤
+- **检索**：客户端子串匹配（中文无需分词），无服务端
+- **部署**：GitHub Pages，由 `.github/workflows/pages.yml` 发布
+
+### 目录结构
+
+```
+site/                       # 前端源文件
+└── assets/
+    ├── style.css           # 样式：浅色 / 深色自适应
+    └── app.js              # 首页筛选与检索
+
+docs/                       # 构建产物，已 gitignore，不入库
+├── index.html              # 首页：政策卡片 + 筛选 / 检索
+├── changes.html            # 变更流
+├── policies/<id>.html      # 每条政策一个详情页（含版本链时间轴）
+├── data/policies.json      # 政策数据（机读）
+├── data/changes.json       # 变更流数据（机读）
+└── assets/                 # 样式与脚本（生成时复制自 site/assets/）
 ```
 
-发布走 `.github/workflows/pages.yml`：CI 里构建、以 Pages 产物形式上传。
-`docs/` 是**构建产物**，已写进 `.gitignore`，不入库。
+### 依赖与构建
+
+站点没有独立的前端依赖，构建只需项目本体已安装：
+
+```bash
+pip install -e ".[dev]"                          # 若尚未安装项目
+finreg build-site                                # 生成到 docs/
+finreg build-site --output /tmp/site-preview     # 换个位置，随手可删
+```
+
+### 本地预览
+
+构建产物是纯静态文件，用任意静态服务器预览即可。必须走 HTTP——
+直接用 file:// 打开会让相对路径与脚本行为不一致：
+
+```bash
+cd docs && python -m http.server 8000            # 浏览器打开 http://localhost:8000
+```
+
+### 部署
+
+推送主干（数据 / 代码 / 前端资源变动）、抓取流程跑完后或手动触发时，
+`pages.yml` 在 CI 里构建、以 Pages 产物形式上传并部署到 GitHub Pages。
+`docs/` 是构建产物，已写进 `.gitignore`，不入库。
 
 仓库侧需先把 Pages 的 Source 设为「GitHub Actions」——这是**一次性**设置，
 且**需要仓库管理权限**：Settings → Pages → Source，或一条
