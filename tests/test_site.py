@@ -39,7 +39,7 @@ from finreg_ai.store import load_policy_schema, validate_against_schema
 from tests.test_models import make_policy
 
 # 固定时间戳：东八区 2026-10-06 12:00。
-# 显式带时区，与生产代码 `datetime.now().astimezone()` 的形态一致。
+# 显式带时区，与生产代码 `datetime.now(CHINA_TZ)` 的形态一致。
 FIXED_TIME = datetime(2026, 10, 6, 12, 0, tzinfo=timezone(timedelta(hours=8)))
 
 
@@ -269,6 +269,23 @@ def test_build_site_generated_at_comes_from_injected_value(tmp_path: Path) -> No
     # 结果里的时间戳应与注入值一致（格式化为 YYYY-MM-DD HH:MM +0800）
     assert result.generated_at == "2026-10-06 12:00 +0800"
     # 页脚必须出现该时间戳
+    assert "+0800" in (out / "index.html").read_text(encoding="utf-8")
+
+
+def test_build_site_default_timestamp_uses_china_timezone(tmp_path: Path) -> None:
+    """验证未注入时间戳时页脚使用北京时间（+0800），而非构建机本地时区。
+
+    反向用例：生产代码若退回 ``datetime.now().astimezone()``，在 UTC 机器上
+    （GitHub 运行器正是 UTC）页脚会显示 +0000，本测试即红——
+    而抓取层时间戳一律是 +08:00（fetchers.base.now_china_iso），
+    两种口径并存会让读者无法判断两个时间是不是同一时刻。
+    这条断言只依赖时区行为、不依赖「今天是哪天」，因此不会随时间漂移。
+    """
+    # 不注入 generated_at，让生产代码自己取当前时刻
+    result, out = build_into(tmp_path, generated_at=None)
+    # 结果里的时间戳必须以东八区偏移结尾
+    assert result.generated_at.endswith("+0800")
+    # 页脚同样必须是东八区
     assert "+0800" in (out / "index.html").read_text(encoding="utf-8")
 
 

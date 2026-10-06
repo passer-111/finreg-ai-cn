@@ -51,6 +51,8 @@ import shutil
 
 # 导入 Policy 类型标注：渲染函数接收的是已加载的模型对象，而非原始字典
 from finreg_ai.models import Policy, policy_to_dict
+# 导入中国大陆时区常量：页脚时间戳必须与抓取层（now_china_iso）同一口径
+from finreg_ai.fetchers.base import CHINA_TZ
 # 导入项目根目录与政策加载函数
 from finreg_ai.store import PROJECT_ROOT, load_all_policies
 
@@ -1135,10 +1137,14 @@ def build_site(
             # 记录问题
             problems.append(f"变更文件 {doc['_unreadable']} 无法解析：{doc.get('_error')}")
 
-    # 生成时间戳：默认取当前北京时间
+    # 生成时间戳：默认取当前北京时间。
+    # 【为什么不能用本机时区】astimezone() 会跟着构建机的时区走：
+    # GitHub 运行器在 UTC，页脚会显示 +0000，与抓取层时间戳（一律 +08:00，
+    # 见 fetchers.base.now_china_iso）口径不一，读者无从判断两个时间是否同一时刻。
+    # 因此这里与抓取层共用 CHINA_TZ 常量，而不是各自取本地时区。
     if generated_at is None:
-        # 用带时区的当前时刻
-        stamp = datetime.now().astimezone()
+        # 用中国大陆时区的当前时刻
+        stamp = datetime.now(CHINA_TZ)
     else:
         # 使用注入的时间
         stamp = generated_at
