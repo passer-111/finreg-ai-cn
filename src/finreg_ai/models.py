@@ -832,7 +832,7 @@ class Policy:
                 f" —— 请在 verified_note 中说明为何无法确认施行日期"
             )
 
-        # 规则 10：未标明核验方式为人工时，提示该记录尚未经人工复核。
+        # 规则 9：未标明核验方式为人工时，提示该记录尚未经人工复核。
         # 这同样是警告：自动化整理的记录有价值，但使用者需要知道
         # 它与人工核验过的记录在可信度上存在差异。
         if self.verified_by == VerifiedBy.AUTOMATED and self.status.is_currently_valid:
@@ -842,7 +842,7 @@ class Policy:
                 f" —— 建议打开官方页面逐项核对状态字段"
             )
 
-        # 规则 9：source.tier 必须为 primary
+        # 规则 10：source.tier 必须为 primary
         if self.source.tier != SourceTier.PRIMARY:
             # 本项目只允许官方原始来源进入记录
             problems.append(f"[{self.id}] source.tier={self.source.tier.value}，本项目只允许 primary 来源")
