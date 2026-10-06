@@ -28,7 +28,7 @@ from pathlib import Path
 
 # 导入待测函数与数据结构
 from finreg_ai.diff import Change, ChangeSet
-from finreg_ai.pipeline import change_identity, write_change_set
+from finreg_ai.pipeline import change_identity, load_previously_discovered_urls, write_change_set
 
 
 # 固定的检测日期。写死日期而不是用当天，是为了让测试与运行日期彻底解耦——
@@ -379,3 +379,66 @@ def test_malformed_change_entries_are_skipped(tmp_path: Path) -> None:
     assert outcome.total == 2
     # 保留的正是那条合法条目
     assert any(item["policy_id"] == "keep-me" for item in read_document(outcome.path)["changes"])
+
+
+# ============================================================
+# 历史变更流已发现链接（「新发现」跨天去重的依据）
+# ============================================================
+
+def make_day_document(day: str, urls: list[str]) -> str:
+    """构造一份变更文件内容并序列化为 JSON 文本。"""
+    # 按链接逐条生成 discovered 明细
+    changes = [
+        {
+            "change_type": "discovered",          # 变更类型
+            "policy_id": f"pending:src:{url}",    # 临时标识
+            "title": "某条目",                     # 标题
+            "url": url,                           # 官方链接
+        }
+        for url in urls
+    ]
+    # 序列化顶层结构
+    return json.dumps({"detected_on": day, "changes": changes}, ensure_ascii=False)
+
+
+def test_previously_discovered_urls_collects_links_across_days(tmp_path: Path) -> None:
+    """验证跨多天的变更文件，链接被汇总为一个集合。"""
+    # 两天各写一份变更文件
+    (tmp_path / "2026-10-04.json").write_text(
+        make_day_document("2026-10-04", ["https://a.cn/1.html"]), encoding="utf-8"
+    )
+    # 第二天含一个重复链接与一个新链接
+    (tmp_path / "2026-10-05.json").write_text(
+        make_day_document("2026-10-05", ["https://a.cn/1.html", "https://b.cn/2.html"]), encoding="utf-8"
+    )
+    # 汇总
+    urls = load_previously_discovered_urls(tmp_path)
+    # 去重后应为两个链接
+    assert urls == {"https://a.cn/1.html", "https://b.cn/2.html"}
+
+
+def test_previously_discovered_urls_returns_empty_when_directory_missing(tmp_path: Path) -> None:
+    """验证目录不存在时返回空集合（还没有任何历史变更是合法状态）。"""
+    # 指向不存在的目录
+    assert load_previously_discovered_urls(tmp_path / "没有这个目录") == set()
+
+
+def test_previously_discovered_urls_skips_corrupt_files(tmp_path: Path) -> None:
+    """反向测试：损坏文件被跳过，其链接**不在**集合里。
+
+    这是刻意的「响亮失败」：被跳过的条目会在下一次抓取时被重新发现，
+    以新条目的姿态出现在当天变更流里，维护者能立刻看到异常。
+    若把损坏文件的链接也算进集合，损坏就会被伪装成「没有变化」。
+    """
+    # 一份合法文件
+    (tmp_path / "2026-10-04.json").write_text(
+        make_day_document("2026-10-04", ["https://a.cn/1.html"]), encoding="utf-8"
+    )
+    # 一份损坏文件，里面有另一个链接
+    (tmp_path / "2026-10-05.json").write_text("{ 这不是 JSON", encoding="utf-8")
+    # 一份顶层是数组的文件
+    (tmp_path / "2026-10-06.json").write_text("[1, 2, 3]", encoding="utf-8")
+    # 汇总
+    urls = load_previously_discovered_urls(tmp_path)
+    # 只有合法文件的链接被收集
+    assert urls == {"https://a.cn/1.html"}

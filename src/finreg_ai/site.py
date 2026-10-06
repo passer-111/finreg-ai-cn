@@ -619,8 +619,42 @@ def render_index(policies: list[Policy], change_documents: list[dict[str, Any]],
         # 空状态提示
         cards = '      <p class="empty">当前库中还没有政策记录。</p>'
 
-    # 计算变更总数，用于首页上的一句摘要 + 指向变更流的链接
-    change_total = sum(len(d.get("changes") or []) for d in change_documents)
+    # 计算「真实待办量」：变更流里尚未被人工录入为政策记录的唯一条目数。
+    #
+    # 为什么不能用「全部变更条目累加」
+    # ------------------------------
+    # 历史变更文件是**按天累积**的：一条三天前被发现、今天仍未录入的条目
+    # 在每一份文件里都躺着，累加会把它数上好几遍；而已经被人工录入为
+    # 正式记录的条目，继续算作「待处理」则是直接说谎。
+    # 两种口径问题都会让首页数字失去意义——维护者看到「累计 500 条待处理」
+    # 时无法判断到底还有多少事要做。
+    #
+    # 口径：只数 ``discovered``（待录入）类型、且链接未出现在政策记录中的条目，
+    # 按链接去重。其它变更类型（首次收录、状态变更等）描述的是已录入记录
+    # 自身的事件，不属于「待处理发现」。
+    known_urls = {p.source.url for p in policies}
+    # 待办条目的链接集合（去重）
+    pending_urls: set[str] = set()
+    # 逐份变更文件统计
+    for doc in change_documents:
+        # 逐条检查
+        for change in doc.get("changes") or []:
+            # 跳过形状不对的条目（与变更流页的容忍策略一致）
+            if not isinstance(change, dict):
+                # 下一条
+                continue
+            # 只统计待录入类型
+            if change.get("change_type") != "discovered":
+                # 下一条
+                continue
+            # 取出链接
+            url = change.get("url")
+            # 已录入为正式记录的不再是待办；无链接的无法对账，不算入待办量
+            if url and str(url) not in known_urls:
+                # 登记待办
+                pending_urls.add(str(url))
+    # 待办量
+    change_total = len(pending_urls)
     # 最新一次变更的日期
     latest_change_day = ""
     # 逐份查找第一个有日期的
@@ -653,7 +687,7 @@ def render_index(policies: list[Policy], change_documents: list[dict[str, Any]],
   <section class="panel">
     <h2>变更流</h2>
     <p class="muted">抓取器每日扫描官方站点，把「新出现的条目」写进变更流。这些条目<b>尚未经人工认定</b>，因此不在上方政策列表中——它们需要人打开原文核对后才能提升为正式记录。</p>
-    <p>累计 <b>{change_total}</b> 条待处理发现{latest_text}。 <a href="changes.html">查看完整变更流 →</a></p>
+    <p>当前 <b>{change_total}</b> 条待处理发现（已按链接去重，不含已录入为正式记录的条目）{latest_text}。 <a href="changes.html">查看完整变更流 →</a></p>
   </section>
 
   <section class="panel">

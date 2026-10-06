@@ -241,6 +241,62 @@ def fetch_all(
 # 变更产出阶段
 # ============================================================
 
+def load_previously_discovered_urls(directory: Path | None = None) -> set[str]:
+    """读取历史变更流里已发现条目的链接集合，用于「新发现」去重。
+
+    为什么需要它
+    ------------
+    原来的比对范围只有「已录入政策的官方链接」：一条昨天被发现、
+    今天仍未人工录入的条目，会在今天、明天、后天反复出现在变更流里。
+    变更流因此不断膨胀，而每一条都是同一个待办事项的复读——
+    「今天有没有真正的新东西」反而被淹没，待办数量也失去意义。
+
+    因此比对范围扩为：已录入政策的链接 ∪ 历史变更流已发现的链接。
+
+    对损坏文件的处理
+    ----------------
+    读不出来的历史文件被跳过，它的条目会被重新发现一次。
+    这是刻意的「响亮失败」：重新发现的条目会以新条目的姿态出现在
+    当天的变更流里，维护者能立刻看到异常——而不是让损坏静默过去，
+    那会把「文件坏了」伪装成「没有变化」。
+    """
+    # 未指定目录时使用默认变更目录
+    target = directory or CHANGES_DIR
+    # 目录不存在说明还没有任何历史变更，返回空集合（合法状态）
+    if not target.is_dir():
+        # 无历史
+        return set()
+    # 链接收集
+    urls: set[str] = set()
+    # 逐个变更文件读取（文件名即日期，排序保证处理顺序稳定）
+    for path in sorted(target.glob("*.json")):
+        # 解析失败跳过：该文件的条目会被重新发现，异常因此可见（见 docstring）
+        try:
+            # 读取并解析
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            # 下一个文件
+            continue
+        # 顶层不是对象同样视为不可用
+        if not isinstance(data, dict):
+            # 下一个文件
+            continue
+        # 逐条收集链接
+        for item in data.get("changes") or []:
+            # 跳过形状不对的条目
+            if not isinstance(item, dict):
+                # 下一条
+                continue
+            # 取出链接
+            url = item.get("url")
+            # 只收集非空链接
+            if url:
+                # 登记
+                urls.add(str(url))
+    # 返回集合
+    return urls
+
+
 def change_identity(change: Change) -> tuple[str, str, str]:
     """返回一条变更的自然键，用于判断「这是不是同一条变更」。
 
@@ -479,8 +535,10 @@ def run_pipeline(
     # --- 第 5 步：比对，产出变更 ---
     # 收集本次抓到的全部条目
     all_docs = [doc for result in report.fetch_results for doc in result.docs]
-    # 已有记录的官方链接集合，用于判断哪些条目尚未录入
-    known_urls = {p.source.url for p in policies.values()}
+    # 「已见过」的链接集合 = 已录入政策的官方链接 ∪ 历史变更流已发现的链接。
+    # 只有前者时，一条尚未人工录入的发现会在每天的变更流里反复出现，
+    # 变更流被同一个待办事项的复读淹没（见 load_previously_discovered_urls）。
+    known_urls = {p.source.url for p in policies.values()} | load_previously_discovered_urls()
     # 检测已有记录之间的变更（需要一个「旧版本」作对比基准；
     # 此处以磁盘上的当前状态作为新版本，旧版本由 CI 从 git 历史取得，
     # 在没有 git 上下文时跳过这一步）

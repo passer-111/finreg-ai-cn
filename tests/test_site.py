@@ -662,6 +662,47 @@ def test_index_states_coverage_limitation(tmp_path: Path) -> None:
     assert "不构成对监管要求的完整枚举" in index_html
 
 
+def test_index_pending_count_excludes_recorded_and_duplicate_entries(tmp_path: Path) -> None:
+    """验证首页「待处理发现」是真实待办量，而非历史条目的简单累加。
+
+    三个口径规则必须同时成立，缺一不可：
+    ① 已录入为正式记录的条目不再算待办；
+    ② 同一条目在多天的变更文件里出现，只数一次；
+    ③ 非 discovered 类型（已录入记录自身的事件）不算待办。
+    只满足其中两条时，数字仍然会说谎。
+    """
+    # 一条已录入的政策，其官方链接为 a.html
+    policy = make_policy()
+    # 构造四份变更数据：
+    # - a.html 的 discovered（已录入 → 不算）
+    # - b.html 的 discovered 出现在两天（重复 → 只数一次）
+    # - c.html 的 discovered（真正的待办）
+    # - d.html 的 status_changed（已录入记录的事件 → 不算）
+    documents = [
+        make_change_document(changes=[
+            make_change(url="https://example.gov.cn/a.html"),
+            make_change(url="https://example.gov.cn/b.html"),
+        ]),
+        make_change_document(day="2026-10-04", changes=[
+            make_change(url="https://example.gov.cn/b.html"),
+            make_change(url="https://example.gov.cn/c.html"),
+            make_change(change_type="status_changed", url="https://example.gov.cn/d.html"),
+        ]),
+    ]
+    # 构建
+    _result, out = build_into(
+        tmp_path,
+        policies={policy.id: policy},
+        change_documents=documents,
+    )
+    # 读首页
+    index_html = (out / "index.html").read_text(encoding="utf-8")
+    # 待办量应为 2（b.html 与 c.html）
+    assert "当前 <b>2</b> 条待处理发现" in index_html
+    # 反向夹逼：若退回「全部条目累加」，数字会是 5，此断言必红
+    assert "当前 <b>5</b> 条待处理发现" not in index_html
+
+
 # ============================================================
 # 相对路径（子目录页面）
 # ============================================================
