@@ -418,7 +418,8 @@ finreg-ai-cn/
 │   ├── fetch.yml            # 定时抓取（每天一次，自动提交变更流）
 │   └── pages.yml            # 构建静态站并发布到 GitHub Pages
 ├── data/
-│   ├── policies/            # ← 政策记录（每条一个 YAML 文件）
+│   ├── policies/            # ← 政策记录（每条一个 YAML 文件，经人工核验）
+│   ├── drafts/              # ← 政策补录草稿：未经人工核验的候选记录，不得当作合规依据，见其 README
 │   ├── enforcement/         # ← 执法记录（罚单），当前为空目录，见其 README
 │   ├── sources.yaml         # 数据源登记表：唯一的「数据来源真相」
 │   ├── changes/             # 每次抓取的变更流（按日期命名，由 CI 自动写入；同日多次运行会合并）
@@ -446,7 +447,7 @@ finreg-ai-cn/
 │       └── penalty_table.py         # 行政处罚：列表页取地址 → 详情页表格逐行还原
 ├── tests/
 │   ├── fixtures/            # 合成固定装置（离线测试用）
-│   └── test_*.py            # 298 个测试，全部离线
+│   └── test_*.py            # 320 个测试，全部离线
 ├── docs/                    # ← 站点构建产物，不入库（.gitignore）
 ├── CONTRIBUTING.md          # ← 贡献前请先读这个
 ├── DATA_LICENSE.md          # 数据授权说明
