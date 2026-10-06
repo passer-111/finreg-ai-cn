@@ -408,6 +408,7 @@ def _page_shell(*, title: str, body: str, asset_prefix: str, generated_at: str) 
 <meta name="description" content="{_esc(SITE_TITLE)} —— {_esc(SITE_TAGLINE)}。收录中国金融领域人工智能合规相关政策，含生效状态、版本链与变更流。">
 <title>{full_title}</title>
 <link rel="stylesheet" href="{asset_prefix}assets/style.css">
+<link rel="icon" href="{asset_prefix}assets/favicon.ico" sizes="16x16">
 </head>
 <body>
 <header class="site-header">

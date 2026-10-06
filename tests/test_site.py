@@ -62,6 +62,8 @@ def make_site_source(tmp_path: Path) -> Path:
     (assets / "style.css").write_text("/* 测试样式 */\n", encoding="utf-8")
     # 写一个占位脚本文件
     (assets / "app.js").write_text("// 测试脚本\n", encoding="utf-8")
+    # 写一个占位图标文件（内容无关紧要，复制逻辑只关心「文件在不在」）
+    (assets / "favicon.ico").write_bytes(b"\x00\x00\x01\x00")
     # 返回站点源目录
     return tmp_path / "site"
 
@@ -147,6 +149,7 @@ def test_build_site_writes_every_expected_file(tmp_path: Path) -> None:
         "data/changes.json",                            # 变更 JSON API
         "assets/style.css",                             # 样式
         "assets/app.js",                                # 检索脚本
+        "assets/favicon.ico",                           # 站点图标
         ".nojekyll",                                    # 关闭 Jekyll 处理的标记
     }
     # 逐个断言文件真实存在（用 returned 的 written 清单对比磁盘会让断言失真）
@@ -654,6 +657,29 @@ def test_detail_page_uses_parent_prefix_for_assets(tmp_path: Path) -> None:
     assert 'href="assets/style.css"' in index_html
     # 首页不该出现返回上一级的资源引用
     assert 'href="../assets/style.css"' not in index_html
+
+
+def test_every_page_links_favicon_with_correct_prefix(tmp_path: Path) -> None:
+    """验证首页与详情页都声明了 favicon，且子目录页面带 ``../`` 前缀。
+
+    favicon 缺失时浏览器会给每个页面请求一次 /favicon.ico 并拿到 404——
+    这不会报错，但会让站点在浏览器标签页上缺少标识，属于「看不见的不完整」。
+    与样式表同理，详情页的图标链接最容易因为少了 ``../`` 而静默 404。
+    """
+    # 一条政策，构建出首页与详情页
+    policy = make_policy()
+    # 构建
+    _result, out = build_into(tmp_path, policies={policy.id: policy})
+    # 首页用根相对路径
+    index_html = (out / "index.html").read_text(encoding="utf-8")
+    # 首页的图标链接
+    assert 'rel="icon" href="assets/favicon.ico"' in index_html
+    # 详情页必须回到上一级
+    detail = (out / "policies" / f"{policy.id}.html").read_text(encoding="utf-8")
+    # 详情页的图标链接
+    assert 'rel="icon" href="../assets/favicon.ico"' in detail
+    # 反向夹逼：首页若被加上 ../ 前缀，此断言会红
+    assert 'rel="icon" href="../assets/favicon.ico"' not in index_html
 
 
 # ============================================================
