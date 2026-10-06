@@ -575,7 +575,7 @@ def validate_enforcement_references(
     return problems
 
 
-def find_stale_policies(policies: dict[str, Policy], today: Any, threshold_days: int = 90) -> list[tuple[str, int]]:
+def find_stale_policies(policies: dict[str, Policy], today: Any, threshold_days: int = 180) -> list[tuple[str, int]]:
     """找出超过阈值天数未核验的政策，返回 ``[(id, 天数)]``。
 
     这是「时效性治理」从口号变成机制的关键一步。
@@ -585,6 +585,11 @@ def find_stale_policies(policies: dict[str, Policy], today: Any, threshold_days:
 
     参数 today 由调用方传入而非内部取当天，
     目的是让测试可以注入固定日期，避免结果随运行日期漂移。
+
+    阈值默认 180 天，与 ``finreg validate`` 及 ``finreg stale`` 的默认值一致。
+    【为什么不能与 CLI 各写一份】这里曾经是 90，而 CLI 是 180：
+    直接调用本函数的代码与命令行会得出两套不同的「陈旧」结论，
+    使用者无从判断哪个才算数。阈值口径必须只有一个来源。
     """
     # 结果列表
     stale: list[tuple[str, int]] = []

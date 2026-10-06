@@ -374,6 +374,34 @@ def test_find_stale_policies_returns_sorted_tuples() -> None:
     assert all(len(item) == 2 for item in stale)
 
 
+def test_find_stale_policies_default_threshold_matches_cli() -> None:
+    """验证不传阈值时默认值是 180 天，与 finreg validate / finreg stale 的默认一致。
+
+    反向用例：默认值曾经写成 90，而 CLI 默认 180——
+    直接调用本函数的代码与命令行得出两套不同的「陈旧」结论，
+    使用者无从判断哪个算数。用「恰好 180 天不判陈旧、181 天判陈旧」
+    做边界夹逼：默认值若改回 90，两条断言都会红。
+    注意判定符是 ``days > threshold``，因此边界取「等于阈值」与「阈值 +1」。
+    """
+    # 局部导入：仅本测试需要构造合成记录
+    from tests.test_models import make_policy
+
+    # 固定基准日，与「今天」无关，测试不会随时间漂移
+    ref_day = date(2026, 10, 7)
+    # 构造两条记录：一条恰好 180 天未核验，一条 181 天未核验
+    at_boundary = make_policy(id="test-2026-boundary", last_verified=date(2026, 4, 10))   # 恰好 180 天
+    # 再早一天
+    over_boundary = make_policy(id="test-2026-over", last_verified=date(2026, 4, 9))       # 181 天
+    # 组装记录表
+    policies = {p.id: p for p in (at_boundary, over_boundary)}
+    # 不传阈值，走默认值
+    stale = find_stale_policies(policies, ref_day)
+    # 恰好等于阈值不判陈旧（判定符是严格大于）
+    assert [pid for pid, _days in stale] == ["test-2026-over"]
+    # 阈值 +1 天必须判陈旧，天数为 181
+    assert stale[0][1] == 181
+
+
 # ============================================================
 # 内容哈希与文本归一化
 # ============================================================
