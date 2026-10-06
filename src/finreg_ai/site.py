@@ -507,7 +507,11 @@ def _render_filters(policies: list[Policy]) -> str:
         for r in relevances
     )
 
-    # 组装筛选区
+    # 组装筛选区。
+    # noscript 提示不可省：筛选与结果计数都由客户端脚本驱动，
+    # 禁用 JavaScript 时控件会「看起来能用、实际不动」——
+    # 用户会以为是筛选坏了或库是空的。显式说明「当前显示全部记录」，
+    # 与「明确失败优于静默错误」是同一条原则。
     return f"""      <div class="filters">
         <input type="search" id="q" class="search" placeholder="搜索标题、机构、义务内容、主题…" aria-label="搜索政策">
         <select id="f-status" aria-label="按状态筛选">
@@ -524,6 +528,7 @@ def _render_filters(policies: list[Policy]) -> str:
         </select>
         <button type="button" id="reset" class="reset">重置</button>
       </div>
+      <noscript><p class="muted">搜索与筛选需要启用 JavaScript；当前显示全部记录。</p></noscript>
       <p class="result-line"><span id="result-count"></span></p>"""
 
 

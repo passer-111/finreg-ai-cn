@@ -629,6 +629,23 @@ def test_index_search_blob_covers_issuer_code(tmp_path: Path) -> None:
     assert " nfra " in index_html
 
 
+def test_index_carries_noscript_notice_for_filters(tmp_path: Path) -> None:
+    """验证禁用 JavaScript 时，筛选区有明确的降级提示。
+
+    筛选与结果计数由客户端脚本驱动；没有脚本时控件「看起来能用、
+    实际不动」，用户会误以为筛选坏了或库是空的。
+    noscript 提示把「当前显示的是全部记录」说清，避免误读。
+    """
+    # 构建
+    _result, out = build_into(tmp_path, policies={p.id: p for p in [make_policy()]})
+    # 读首页
+    index_html = (out / "index.html").read_text(encoding="utf-8")
+    # 必须含 noscript 降级提示
+    assert "<noscript>" in index_html
+    # 且说清后果：显示的是全部记录
+    assert "当前显示全部记录" in index_html
+
+
 # ============================================================
 # 相对路径（子目录页面）
 # ============================================================
