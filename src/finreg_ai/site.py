@@ -639,11 +639,15 @@ def render_index(policies: list[Policy], change_documents: list[dict[str, Any]],
     # CI 还要跑多个解释器。把条件表达式提到 f-string 之外，是唯一跨版本安全的写法。
     latest_text = f"，最近一次在 {_esc(latest_change_day)}" if latest_change_day else ""
 
-    # 组装主体
+    # 组装主体。
+    # 覆盖局限声明刻意不写具体条数：统计条里的数字由数据实时汇总，
+    # 声明里再硬编码一份，两边必然在将来某天对不上——
+    # 「文档承诺 = 实际行为」这条纪律对页面文案同样成立。
     body = f"""  <section class="hero">
     <h1>{_esc(SITE_TITLE)}</h1>
     <p class="lede">中国金融领域人工智能合规政策的<b>活</b>知识库。与静态法规汇编的区别在于：每条记录都带生效状态、版本链与官方原文链接，并且我们持续跟踪它<b>什么时候变了</b>。</p>
 {_render_stats(policies)}
+    <p class="muted">覆盖范围：本站是持续建设中的专题知识库，只收录「金融领域 × 人工智能合规」交叉处的监管文件，<b>不构成对监管要求的完整枚举</b>。是否存在某项合规义务，请以官方原文与专业机构意见为准。</p>
   </section>
 
   <section class="panel">

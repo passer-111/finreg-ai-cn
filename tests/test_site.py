@@ -646,6 +646,22 @@ def test_index_carries_noscript_notice_for_filters(tmp_path: Path) -> None:
     assert "当前显示全部记录" in index_html
 
 
+def test_index_states_coverage_limitation(tmp_path: Path) -> None:
+    """验证首页声明「不构成对监管要求的完整枚举」。
+
+    使用者最常见的误读是把「本站收录的政策」当成「全部监管要求」。
+    这条声明与免责声明同级重要：后者说「我不是法律意见」，
+    前者说「我不是完整清单」——缺了任何一句，
+    知识库都会被当成它明确拒绝充当的东西。
+    """
+    # 构建
+    _result, out = build_into(tmp_path, policies={p.id: p for p in [make_policy()]})
+    # 读首页
+    index_html = (out / "index.html").read_text(encoding="utf-8")
+    # 必须声明覆盖局限
+    assert "不构成对监管要求的完整枚举" in index_html
+
+
 # ============================================================
 # 相对路径（子目录页面）
 # ============================================================
