@@ -179,3 +179,6 @@ secrets.yaml
 
 # secondary 来源的隔离区，禁止提交
 data/snapshots/_secondary_quarantine/
+
+# 本机双击启动核验台的脚本：内含本机 venv 绝对路径，属机器特定文件，不入库
+启动核验台.bat
