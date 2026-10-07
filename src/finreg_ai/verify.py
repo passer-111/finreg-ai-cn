@@ -948,38 +948,38 @@ _MANDATORY_TYPES = {
 
 
 def _clause_pattern(clause: str) -> re.Pattern[str] | None:
-    """把义务条目的 ``clause`` 字段编译成「第 X 条」定位正则。
+    """把义务条目的 ``clause`` 字段编译成条款定位正则。
 
     ``clause`` 的约定写法是「十六」「第 16 条」「16」——
     统一提取其中的数字语义，生成同时匹配阿拉伯与中文写法的正则。
+    金融监管文件常用「（一）（二）」子条编号（如金规〔2026〕3 号），
+    因此正则同时匹配「第 X 条」与「（X）」两种形态；
     无法提取数字语义时返回 None（调用方退化为字面匹配）。
     """
+    # 数字语义提取结果（两条路径共用构造逻辑）
+    value: int | None = None
     # 先尝试提取阿拉伯数字
     arabic = re.search(r"\d+", clause)
-    # 命中时构造「阿拉伯|中文」二选一正则
+    # 命中时取数字值
     if arabic:
         # 数字值
         value = int(arabic.group(0))
-        # 中文写法（可能为 None）
-        cn = _int_to_cn(value)
-        # 备选写法列表
-        forms = [str(value)] + ([cn] if cn else [])
-        # 编译「第（16|十六）条」
-        return re.compile(r"第\s*(?:" + "|".join(forms) + r")\s*条")
-    # 再尝试把整段当中文数字解析（如「十六」）。
-    # 变量另起名字：上面的 value 已被 mypy 推断为 int，
-    # 这里的结果是 int | None，复用同名变量会让类型推断冲突。
-    cn_value = _cn_to_int(re.sub(r"[第条\s]", "", clause))
-    # 解析成功时同样构造二选一
-    if cn_value is not None:
-        # 中文写法
-        cn = _int_to_cn(cn_value)
-        # 备选写法
-        forms = [str(cn_value)] + ([cn] if cn else [])
-        # 编译
-        return re.compile(r"第\s*(?:" + "|".join(forms) + r")\s*条")
-    # 提取不到数字语义
-    return None
+    else:
+        # 再尝试把整段当中文数字解析（如「十六」；括号也剥掉——
+        # 「（一）」子条编号是金规文件的常见形态，P3 实测 14 条义务全是这种写法）
+        value = _cn_to_int(re.sub(r"[第条\s（）()]", "", clause))
+    # 提取失败：返回 None，调用方做字面匹配
+    if value is None:
+        # 提取不到数字语义
+        return None
+    # 中文写法（可能为 None）
+    cn = _int_to_cn(value)
+    # 备选写法列表
+    forms = [str(value)] + ([cn] if cn else [])
+    # 数字部分（二选一）
+    numeral = "(?:" + "|".join(forms) + ")"
+    # 编译：同时匹配「第 X 条」与「（X）」两种编号形态
+    return re.compile(r"第\s*" + numeral + r"\s*条|（\s*" + numeral + r"\s*）")
 
 
 def _extract_clause_paragraph(text: str, match_start: int) -> str:
@@ -1027,17 +1027,52 @@ def check_obligations(policy: Policy, content: PageContent | None) -> list["Chec
 
     # 结果容器
     results: list[CheckResult] = []
+    # 页面是否确为该文件全文（定位失败的红/需人工核分流要靠它——
+    # 与日期层同一条铁律：「0 命中 → 下结论」前必须先证明拿到的是全文。
+    # P3 实测：shell 页/机构首页上 25 条义务被误报「条款号填写有误」，
+    # 那不是证据冲突，是取证失败）
+    is_full_text = _page_contains_document(policy, content)
     # 逐条义务核对
     for index, obligation in enumerate(policy.key_obligations):
         # 检查项标识
         check_id = f"obligation:{index}"
         # 编译条款定位正则
         pattern = _clause_pattern(obligation.clause)
-        # 无法编译时退化为字面匹配（clause 本身就是段落标记）
+        # 正则定位（匹配「第 X 条」或「（X）」两种编号形态）
         match = pattern.search(content.body_text) if pattern else None
-        # 定位失败：红
-        if match is None:
-            # 追加红项
+        # 字面回退：无法编译出数字语义时按原字符串查找。
+        # 注释曾承诺这条路径但代码从未实现（``if pattern else None``），
+        # P3 校准才发现——「（十五）」之外的非数字 clause（如「附件」）
+        # 在此之前必然定位失败
+        literal_start = -1
+        # 仅在正则不可用且正则未命中时尝试
+        if match is None and pattern is None:
+            # 原字符串精确查找
+            literal_start = content.body_text.find(obligation.clause.strip())
+        # 定位失败
+        if match is None and literal_start < 0:
+            # 分流：页面不是该文件全文时是取证失败（需人工核），
+            # 是全文却找不到才是证据冲突（红）
+            if not is_full_text:
+                # 追加需人工核项
+                results.append(CheckResult(
+                    check_id=check_id,
+                    layer="义务核对",
+                    status=STATUS_MANUAL,
+                    summary=(
+                        f"第 {obligation.clause} 条：页面不含该文件全文特征"
+                        "（可能为栏目页或脚本壳）—— 无法自动取证，需人工核"
+                    ),
+                    evidence=[f"义务概括：{obligation.summary}"],
+                    options=[CheckOption(
+                        key="confirm-clause",
+                        label="我已人工核对原文该条款",
+                        action={"kind": "acknowledge", "field": f"obligation:{index}"},
+                    )],
+                ))
+                # 继续下一条
+                continue
+            # 全文页上定位失败：红
             results.append(CheckResult(
                 check_id=check_id,
                 layer="义务核对",
@@ -1059,8 +1094,10 @@ def check_obligations(policy: Policy, content: PageContent | None) -> list["Chec
             ))
             # 继续下一条
             continue
+        # 段落起点：正则命中位置或字面命中位置
+        paragraph_start = match.start() if match else literal_start
         # 取出该条款的完整段落
-        paragraph = _extract_clause_paragraph(content.body_text, match.start())
+        paragraph = _extract_clause_paragraph(content.body_text, paragraph_start)
         # 计算概括与原段的重合度（归一化后比对，消除排版差异）
         overlap = difflib.SequenceMatcher(None, obligation.summary, paragraph).ratio()
         # 情态词检查：段落里的表述与义务类型是否一致

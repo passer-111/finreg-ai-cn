@@ -450,7 +450,7 @@ finreg-ai-cn/
 │       └── penalty_table.py         # 行政处罚：列表页取地址 → 详情页表格逐行还原
 ├── tests/
 │   ├── fixtures/            # 合成固定装置（离线测试用）
-│   └── test_*.py            # 369 个测试，全部离线
+│   └── test_*.py            # 387 个测试，全部离线
 ├── docs/                    # ← 站点构建产物，不入库（.gitignore）
 ├── CONTRIBUTING.md          # ← 贡献前请先读这个
 ├── DATA_LICENSE.md          # 数据授权说明

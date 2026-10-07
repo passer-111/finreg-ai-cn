@@ -727,6 +727,86 @@ def test_obligations_manual_when_body_unusable() -> None:
     assert results[0].status == STATUS_MANUAL
 
 
+def test_obligations_locate_fail_on_nav_page_is_manual_not_error() -> None:
+    """验证导航页上定位失败标「需人工核」而非红（P3 校准的铁律5分流）。
+
+    这是 test_obligations_error_when_clause_not_found 的配对反向测试：
+    同一个「第九十九条」，在全文页上是红（证据冲突），在导航页上
+    必须是 manual（取证失败）——P3 实测 25 条义务曾因缺这道分流
+    在壳页/机构首页上被误报「条款号填写有误」。
+    """
+    # 构造含第九十九条义务的记录（导航页里没有，全文页里也没有）
+    policy = _policy_with_obligation("某条不存在的义务", clause="九十九")
+    # 导航页内容（≥200 字符、正文标记可用，但不含本记录任何特征）
+    content = extract_content(NAV_ONLY_PAGE_HTML)
+    # 前置断言：fixture 必须被判定为「可用但非全文」，否则本测试空转
+    assert content.usable
+    # 检查
+    results = check_obligations(policy, content)
+    # manual 而非 error
+    assert results[0].status == STATUS_MANUAL
+    # 结论说明是取证失败而非条款号有误
+    assert "无法自动取证" in results[0].summary
+
+
+def test_obligations_subsection_clause_locates() -> None:
+    """验证「（十五）」子条编号能定位（金规文件常见形态，P3 实测 14 条义务全是这种）。"""
+    # 构造子条编号页面：标题 + （一）至（十六）的分项列表
+    # （正文须超过 200 字符的可用门槛，否则在正文可用性那一关就被拦下，
+    # 走不到条款定位——第一条 fixture 就是踩的这个坑）
+    subsection_html = (
+        "<html><head><title>某测试政策_某测试机构</title></head><body>"
+        "<h1>某测试政策</h1>"
+        "<p>第一条 为规范人工智能在金融机构的开发与应用，防范化解相关风险，"
+        "保护金融消费者合法权益，根据有关法律法规，现将有关事项通知如下。</p>"
+        "<p>第二条 各机构应当充分认识人工智能应用的重要意义，坚持安全与发展并重，"
+        "建立健全内部管理制度，明确责任分工，确保各项要求落实到位。</p>"
+        "<p>二、机构管理要求</p>"
+        "<p>（一）应当建立人工智能治理架构，明确董事会职责与跨部门协同机制。</p>"
+        "<p>（十五）应当按业务场景重要性、应用规模、对客影响度开展风险识别与分类分级管理。</p>"
+        "<p>（十六）高风险应用须经本机构人工智能治理委员会审议后方可上线运行。</p>"
+        "</body></html>"
+    )
+    # 概括与（十五）原段一致
+    policy = _policy_with_obligation(
+        "应当按业务场景重要性、应用规模、对客影响度开展风险识别与分类分级管理",
+        clause="（十五）",
+    )
+    # 提取内容
+    content = extract_content(subsection_html)
+    # 检查
+    results = check_obligations(policy, content)
+    # 绿（子条定位成功 + 概括一致）
+    assert results[0].status == STATUS_OK
+
+
+def test_obligations_literal_fallback_when_clause_has_no_number() -> None:
+    """验证无数字语义的 clause 走字面匹配（此路径曾被注释承诺但从未实现）。"""
+    # 构造含「附件」段落的页面（正文同样须超过 200 字符的可用门槛）
+    appendix_html = (
+        "<html><head><title>某测试政策_某测试机构</title></head><body>"
+        "<h1>某测试政策</h1>"
+        "<p>第一条 为规范人工智能科技活动伦理审查，保障科技活动安全可靠、"
+        "可控可信，促进人工智能健康发展，根据有关法律法规，制定本办法。</p>"
+        "<p>第二条 开展人工智能科技活动的单位应当履行伦理审查主体责任，"
+        "建立健全审查制度，配备必要的人员与条件，保证审查工作独立、客观、公正。</p>"
+        "<p>附件 高风险活动清单：一、对人类主观行为、心理情绪和生命健康"
+        "具有较强影响的人机融合系统的研发；二、具有舆论社会动员能力的算法模型开发。</p>"
+        "</body></html>"
+    )
+    # clause 为「附件」——没有数字语义，只能靠字面匹配定位
+    policy = _policy_with_obligation(
+        "高风险活动清单：对人类主观行为、心理情绪和生命健康具有较强影响的人机融合系统研发",
+        clause="附件",
+    )
+    # 提取内容
+    content = extract_content(appendix_html)
+    # 检查
+    results = check_obligations(policy, content)
+    # 绿（字面定位成功 + 概括一致）
+    assert results[0].status == STATUS_OK
+
+
 # ============================================================
 # 贯穿：完整证据卡
 # ============================================================
