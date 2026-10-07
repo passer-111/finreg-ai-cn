@@ -323,6 +323,51 @@ def build_verified_note(policy: Policy, card: EvidenceCard, decisions: list[Deci
 
 
 # ============================================================
+# 自动入库（无闸门，verified_by 保持 automated）
+# ============================================================
+
+def auto_promote_eligible(card: EvidenceCard) -> bool:
+    """返回一张证据卡是否全绿（仅用于在说明与输出里如实表述，不作闸门）。
+
+    用户已明确（2026-10-08）：知识库现阶段不追求权威性，全部草稿
+    无条件自动入库。本函数保留下来只有一个用途——让 verified_note
+    与命令行输出能如实区分「全绿入库」与「含非绿项入库」。
+    记录必须对自己看到的东西诚实，这与是否设人工闸门无关。
+    """
+    # 有检查项且全部为绿
+    return bool(card.checks) and all(c.status == "ok" for c in card.checks)
+
+
+def build_auto_note(policy: Policy, card: EvidenceCard, today: date) -> str:
+    """自动入库的核验说明：机器证据实况 + 如实声明置信等级。
+
+    必须写明 verified_by 保持 automated——自动入库绝不冒充人工
+    核验。含非绿项时逐条列出：这条 note 是后来人判断「这条记录
+    能当什么级别依据」的唯一入口，含糊一个字都是在伪造置信度。
+    """
+    # 全绿与含非绿两种表述分开
+    if auto_promote_eligible(card):
+        # 全绿：逐层留档（每层绿都是正面证据）
+        evidence_text = "；".join(f"[{c.layer}] {c.summary}" for c in card.checks)
+        # 结论前缀
+        grade = "机器四层取证全绿"
+    else:
+        # 含非绿：逐条列出机器看到的疑点（不是闸门，是如实标注）
+        evidence_text = "；".join(
+            f"[{c.layer}/{c.status}] {c.summary}" for c in card.pending_checks()
+        )
+        # 结论前缀
+        grade = f"机器取证含 {len(card.pending_checks())} 项非绿（未经人工处理）"
+    # 组装说明
+    return (
+        f"{today.isoformat()} {grade}，自动入库"
+        "（verified_by 保持 automated，未经人工核验；"
+        "需要人工级置信时请对该记录单独走 finreg verify 核验流程）。"
+        f"机器证据：{evidence_text}"
+    )
+
+
+# ============================================================
 # 入库动作（原子执行，任一步失败整体回滚）
 # ============================================================
 
@@ -336,12 +381,17 @@ def promote_draft(
     log_dir: Path | None = None,
     today: date | None = None,
     validator: Callable[[], list[str]] | None = None,
+    auto: bool = False,
 ) -> PromoteResult:
     """把一条草稿提升为正式记录。
 
     执行序列（任一步失败整体回滚并报错）：
-    ① 决策状态机检查——红/黄/需人工核项未清零时拒绝；
-    ② 应用判断动作改写字段，verified_by → human，last_verified → 当天；
+    ① 放行检查——人工模式：红/黄/需人工核项未清零时拒绝；
+      自动模式（``auto=True``）：无闸门（用户 2026-10-08 明确：
+      知识库现阶段不追求权威性，全部草稿无条件入库，
+      用到哪条再由使用者自行核验）；
+    ② 改写字段——人工模式：应用判断动作、verified_by → human；
+      自动模式：不动字段值，verified_by 保持 automated（绝不冒充人工）；
     ③ 写入 data/policies/ 并删除 data/drafts/ 原文件；
     ④ 证据卡完整落盘（cards/<id>.json）并追加入库台账（引用卡片路径）；
     ⑤ 跑整库校验兜底——引入新错误则回滚（台账追加 rollback 记录）；
@@ -362,16 +412,20 @@ def promote_draft(
     # 结果对象（先建好，各分支往里填）
     result = PromoteResult(ok=False, policy_id=policy_id)
 
-    # --- 第①步：决策状态机 ---
-    blocked = blocked_reasons(card, decisions)
-    # 有未判断项：拒绝入库
-    if blocked:
-        # 填阻断原因
-        result.blocked_reasons = blocked
-        # 消息
-        result.messages.append(f"入库被拒绝：{len(blocked)} 个检查项尚未判断")
-        # 返回
-        return result
+    # --- 第①步：放行检查 ---
+    # 自动模式无闸门（唯一兜底是第⑤步的整库校验——schema 级失败
+    # 机器自己能判，不需要人）；人工模式走决策状态机
+    if not auto:
+        # 人工模式：决策状态机
+        blocked = blocked_reasons(card, decisions)
+        # 有未判断项：拒绝入库
+        if blocked:
+            # 填阻断原因
+            result.blocked_reasons = blocked
+            # 消息
+            result.messages.append(f"入库被拒绝：{len(blocked)} 个检查项尚未判断")
+            # 返回
+            return result
 
     # --- 第②步：读取草稿并改写字段 ---
     draft_path = drafts / f"{policy_id}.yaml"
@@ -387,16 +441,30 @@ def promote_draft(
     raw = yaml.safe_load(original_text)
     # 转对象（草稿已过 schema，转换不会再失败；失败说明文件被手工改坏）
     policy = policy_from_dict(raw)
-    # 应用判断动作
-    changes = apply_decisions(policy, decisions)
-    # 改写核验台账字段
-    policy.verified_by = VerifiedBy.HUMAN          # 人的认定（只能由本路径写入）
-    # 入库日期
-    policy.last_verified = day
-    # 重写核验说明
-    policy.verified_note = build_verified_note(policy, card, decisions, changes, day)
-    # 消息
-    result.messages.append(f"字段已改写：verified_by=human，last_verified={day.isoformat()}")
+    # 两种模式的字段处理分开：人工模式应用判断并升 human；
+    # 自动模式不动任何字段值，只更新 last_verified 与 note
+    if auto:
+        # 字段改动（自动模式恒为空——机器不改事实字段）
+        changes: list[str] = []
+        # verified_by 保持 automated：自动入库的证据等级就是机器级，
+        # 改成 human 是伪造置信度——这条线比入库效率重要
+        policy.last_verified = day
+        # 重写核验说明（机器全绿 + 置信等级声明）
+        policy.verified_note = build_auto_note(policy, card, day)
+        # 消息
+        result.messages.append(
+            f"字段已更新：verified_by 保持 automated，last_verified={day.isoformat()}")
+    else:
+        # 应用判断动作
+        changes = apply_decisions(policy, decisions)
+        # 改写核验台账字段
+        policy.verified_by = VerifiedBy.HUMAN          # 人的认定（只能由本路径写入）
+        # 入库日期
+        policy.last_verified = day
+        # 重写核验说明
+        policy.verified_note = build_verified_note(policy, card, decisions, changes, day)
+        # 消息
+        result.messages.append(f"字段已改写：verified_by=human，last_verified={day.isoformat()}")
 
     # --- 第③步：写入 policies 并删除草稿 ---
     # 目标路径
@@ -433,6 +501,7 @@ def promote_draft(
     log_path = append_log_entry(logs, _log_entry(
         "promote",                                  # 类型：入库
         policy_id,                                  # 政策 id
+        mode="auto" if auto else "human",           # 入库模式（审计要能区分机器放行与人工认定）
         decisions=[d.to_dict() for d in decisions],  # 全部判断
         changes=changes,                            # 字段改动
         evidence_excerpt_count=len(card.pending_checks()),  # 证据摘录条数
@@ -584,6 +653,7 @@ __all__ = [
     "PromoteResult",            # 入库结果
     "RejectResult",             # 退回结果
     "append_log_entry",         # 台账追加
+    "auto_promote_eligible",    # 自动入库放行判定
     "blocked_reasons",          # 决策状态机
     "log_decision",             # 判断留痕
     "persist_card",             # 证据卡落盘

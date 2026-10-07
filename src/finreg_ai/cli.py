@@ -55,7 +55,8 @@ from finreg_ai.site import build_site
 # 导入数据加载函数
 from finreg_ai.store import load_all_policies, load_sources
 # 导入核验取证层：草稿加载、出证、终端渲染
-from finreg_ai.verify import build_all_cards, load_drafts, render_card_lines
+# 导入取证层：批量出证、单条出证（自动入库模式用）、草稿加载、卡片渲染
+from finreg_ai.verify import build_all_cards, build_evidence_card, load_drafts, render_card_lines
 
 # 退出码约定：0 成功，1 发现问题（校验失败），2 用法错误（argparse 默认）
 EXIT_OK = 0       # 一切正常
@@ -338,6 +339,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=8765,                   # 默认 8765（冷门端口，避开常见开发服务）
         metavar="N",                    # 占位符
         help="核验台监听端口（仅 127.0.0.1），默认 8765",  # 说明
+    )
+    # 全自动入库：对全部草稿出证并无闸门入库（verified_by 保持 automated）
+    verify_parser.add_argument(
+        "--auto",                       # 参数名
+        action="store_true",            # 布尔开关
+        help="全自动模式：对全部草稿出证后直接入库（不设人工闸门；"
+             "verified_by 保持 automated，机器证据实况写入 verified_note）",  # 说明
     )
 
     # ------------------------------------------------------------
@@ -922,6 +930,69 @@ def cmd_verify(args: argparse.Namespace) -> int:
         serve(port=args.port)
         # 停止后正常返回
         return EXIT_OK
+
+    # --auto：全自动入库。用户 2026-10-08 明确：知识库现阶段不追求权威性，
+    # 全部草稿出证后无闸门入库，用到哪条再由使用者自行核验。
+    # 保留的两条底线都不是人工闸门：verified_by 保持 automated（不冒充
+    # 人工）、schema 校验失败自动回滚（机器可判，不需要人）。
+    if args.auto:
+        # 延迟导入：入库动作只在自动模式需要
+        from finreg_ai.promote import auto_promote_eligible, promote_draft
+
+        # 加载全部草稿
+        auto_drafts, auto_errors = load_drafts()
+        # 加载错误必须可见（坏文件不会被入库——它过不了 promote 的校验兜底，
+        # 但加载阶段的错误要在动手前就摆出来）
+        for err in auto_errors:
+            # 打印到 stderr
+            print(f"草稿加载问题：{err}", file=sys.stderr)
+        # 空目录：明确说明，不静默成功
+        if not auto_drafts:
+            # 打印
+            print("没有待入库的草稿。")
+            # 返回
+            return EXIT_OK
+        # 统计
+        promoted_count = 0
+        # 回滚计数
+        rolled_back_count = 0
+        # 逐条出证并入库（排序保证输出稳定）
+        for pid in sorted(auto_drafts):
+            # 出证
+            card = build_evidence_card(auto_drafts[pid])
+            # 入库（自动模式：无闸门，校验兜底在内）
+            result = promote_draft(pid, [], card, auto=True)
+            # 成功
+            if result.ok:
+                # 计数
+                promoted_count += 1
+                # 全绿/含非绿如实标注（这不是闸门，是不让输出撒谎）
+                grade = "全绿" if auto_promote_eligible(card) else f"含 {len(card.pending_checks())} 项非绿"
+                # 打印
+                print(f"✓ {pid}：已入库（{grade}）")
+            # 回滚（校验兜底拦住）
+            elif result.rolled_back:
+                # 计数
+                rolled_back_count += 1
+                # 打印（错误明细在 messages 里）
+                print(f"✗ {pid}：入库后校验失败已回滚 —— {result.messages[-2] if len(result.messages) > 1 else result.messages[-1]}",
+                      file=sys.stderr)
+            # 其它失败（草稿不存在等）
+            else:
+                # 打印
+                print(f"✗ {pid}：{'；'.join(result.messages)}", file=sys.stderr)
+        # 失败计数（既未入库也未回滚的——如草稿文件缺失）
+        failed_count = len(auto_drafts) - promoted_count - rolled_back_count
+        # 汇总行
+        print()
+        # 打印统计
+        print(f"自动入库完成：{promoted_count} 条入库，{rolled_back_count} 条回滚，{failed_count} 条失败")
+        # 提示提交（绝不自动提交，理由同人工模式）
+        if promoted_count:
+            # 打印
+            print("请人工执行：git add data/ && git commit（提交是人的决定，本工具不代办）")
+        # 有回滚或失败时返回非零（机器层面的失败要给调用方看到）
+        return EXIT_ISSUES if (rolled_back_count or failed_count) else EXIT_OK
 
     # 加载全部草稿
     drafts, draft_errors = load_drafts()

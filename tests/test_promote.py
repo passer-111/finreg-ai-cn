@@ -24,6 +24,7 @@ import yaml
 
 # 导入被测对象
 from finreg_ai.promote import (
+    auto_promote_eligible,  # 全绿判定（如实表述用）
     Decision,               # 一次判断
     blocked_reasons,        # 决策状态机
     log_decision,           # 判断留痕
@@ -549,3 +550,140 @@ def test_reject_missing_draft(tmp_path) -> None:
     assert not result.ok
     # 报错信息含「不存在」
     assert any("不存在" in m for m in result.messages)
+
+
+# ============================================================
+# 自动入库（无闸门，verified_by 保持 automated）
+# ============================================================
+#
+# 用户 2026-10-08 明确：知识库现阶段不追求权威性，全部草稿无条件
+# 自动入库，用到哪条再由使用者自行核验。这组测试钉住的是两条
+# 不退的线：verified_by 绝不冒充 human；schema 校验失败照样回滚。
+
+def test_auto_promote_all_green_keeps_automated(tmp_path) -> None:
+    """验证全绿自动入库：文件移动、verified_by 保持 automated、台账记 mode=auto。"""
+    # 目录布局
+    drafts = tmp_path / "drafts"
+    # 政策目录
+    policies = tmp_path / "policies"
+    # 台账目录
+    logs = tmp_path / "logs"
+    # 写草稿
+    policy = make_policy(verified_by=VerifiedBy.AUTOMATED)
+    # 写文件
+    _write_draft(drafts, policy)
+    # 构造全绿卡
+    card = _make_card(policy.id, [
+        CheckResult(check_id="reach", layer="可达性", status=STATUS_OK, summary="页面可访问"),
+    ])
+    # 自动入库
+    result = promote_draft(
+        policy.id, [], card,
+        drafts_dir=drafts, policies_dir=policies, log_dir=logs,
+        today=FIXED_DAY, validator=lambda: [], auto=True,
+    )
+    # 成功
+    assert result.ok
+    # 读回正式记录
+    promoted = policy_from_dict(yaml.safe_load(
+        (policies / f"{policy.id}.yaml").read_text(encoding="utf-8")))
+    # verified_by 保持 automated——自动入库绝不冒充人工（这条线不退）
+    assert promoted.verified_by is VerifiedBy.AUTOMATED
+    # last_verified 更新
+    assert promoted.last_verified == FIXED_DAY
+    # note 写明全绿与置信等级
+    assert "全绿" in promoted.verified_note and "automated" in promoted.verified_note
+    # 台账记 mode=auto（审计要能区分机器放行与人工认定）
+    log_lines = (logs / f"{FIXED_DAY.isoformat()}.jsonl").read_text(encoding="utf-8").splitlines()
+    # 取 promote 条目
+    entry = next(json.loads(line) for line in log_lines if json.loads(line)["kind"] == "promote")
+    # 模式
+    assert entry["mode"] == "auto"
+    # 证据卡照样落盘（P5 行为不因自动模式改变）
+    assert (logs / "cards" / f"{policy.id}.json").exists()
+
+
+def test_auto_promote_accepts_non_green_without_gate(tmp_path) -> None:
+    """钉住用户指令：含红项的草稿也无条件入库（无闸门），但 note 必须如实列出非绿项。"""
+    # 目录布局
+    drafts = tmp_path / "drafts"
+    # 政策目录
+    policies = tmp_path / "policies"
+    # 台账目录
+    logs = tmp_path / "logs"
+    # 写草稿
+    policy = make_policy(verified_by=VerifiedBy.AUTOMATED)
+    # 写文件
+    _write_draft(drafts, policy)
+    # 构造含红项的卡（人工模式下这种卡连状态机都过不了）
+    card = _make_card(policy.id, [
+        CheckResult(check_id="title", layer="标题比对", status=STATUS_ERROR, summary="页面标题与记录不符"),
+    ])
+    # 自动入库
+    result = promote_draft(
+        policy.id, [], card,
+        drafts_dir=drafts, policies_dir=policies, log_dir=logs,
+        today=FIXED_DAY, validator=lambda: [], auto=True,
+    )
+    # 无闸门：照样成功
+    assert result.ok
+    # 读回
+    promoted = policy_from_dict(yaml.safe_load(
+        (policies / f"{policy.id}.yaml").read_text(encoding="utf-8")))
+    # verified_by 仍是 automated
+    assert promoted.verified_by is VerifiedBy.AUTOMATED
+    # note 如实列出非绿项——不设闸门不等于让记录撒谎
+    assert "非绿" in promoted.verified_note
+    # 具体疑点入 note
+    assert "标题与记录不符" in promoted.verified_note
+
+
+def test_auto_promote_rolls_back_on_validation_failure(tmp_path) -> None:
+    """验证自动模式的唯一兜底：整库校验失败照样整体回滚。"""
+    # 目录布局
+    drafts = tmp_path / "drafts"
+    # 政策目录
+    policies = tmp_path / "policies"
+    # 台账目录
+    logs = tmp_path / "logs"
+    # 写草稿
+    policy = make_policy(verified_by=VerifiedBy.AUTOMATED)
+    # 写文件
+    _write_draft(drafts, policy)
+    # 记下原文
+    original_text = (drafts / f"{policy.id}.yaml").read_text(encoding="utf-8")
+    # 全绿卡
+    card = _make_card(policy.id, [
+        CheckResult(check_id="reach", layer="可达性", status=STATUS_OK, summary="页面可访问"),
+    ])
+    # 自动入库：校验器注入失败
+    result = promote_draft(
+        policy.id, [], card,
+        drafts_dir=drafts, policies_dir=policies, log_dir=logs,
+        today=FIXED_DAY,
+        validator=lambda: ["[test] 兜底校验失败"],
+        auto=True,
+    )
+    # 失败且已回滚
+    assert not result.ok and result.rolled_back
+    # 草稿逐字节恢复
+    assert (drafts / f"{policy.id}.yaml").read_text(encoding="utf-8") == original_text
+    # 正式记录已删除
+    assert not (policies / f"{policy.id}.yaml").exists()
+
+
+def test_auto_promote_eligible_predicate() -> None:
+    """验证全绿判定（仅用于如实表述，不作闸门）。"""
+    # 全绿
+    green = _make_card("p", [CheckResult(check_id="a", layer="x", status=STATUS_OK, summary="s")])
+    # 全绿为真
+    assert auto_promote_eligible(green)
+    # 含黄
+    mixed = _make_card("p", [
+        CheckResult(check_id="a", layer="x", status=STATUS_OK, summary="s"),
+        CheckResult(check_id="b", layer="y", status=STATUS_WARNING, summary="s"),
+    ])
+    # 非全绿为假
+    assert not auto_promote_eligible(mixed)
+    # 空卡为假（没有证据不叫全绿）
+    assert not auto_promote_eligible(_make_card("p", []))
