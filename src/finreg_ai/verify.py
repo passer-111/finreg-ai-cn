@@ -459,23 +459,53 @@ TITLE_SIMILARITY_THRESHOLD = 0.9
 # 「文章标题<分隔符>站点名」的形态。
 _TITLE_SEPARATORS = ("_", "—", "-", "|", "－")
 
+# 发文字号片段（如「〔2020〕第9号」「〔2026〕3号」）。
+# 政府站 <title> 常把文号嵌在标题中间或后面，
+# 不剥掉的话「同一篇文件」的相似度会被无谓拉低。
+_DOC_NUMBER_PATTERN = re.compile(r"〔[^〕]*〕\s*第?\s*\d+\s*号?")
+
 
 def _title_candidates(page_title: str) -> list[str]:
-    """把页面 <title> 拆成候选标题（去掉站点后缀的各种可能）。"""
-    # 候选集合：完整标题本身总在列
-    candidates = [page_title.strip()]
-    # 按各分隔符切分，取第一段（文章标题在前是政府站的稳定习惯）
-    for sep in _TITLE_SEPARATORS:
-        # 含分隔符时补一个「第一段」候选
-        if sep in page_title:
-            # 取分隔符前的部分
-            candidates.append(page_title.split(sep, 1)[0].strip())
+    """把页面 <title> 拆成候选标题（去站点后缀、书名号、文号的各种可能）。
+
+    为什么候选要这么宽：实测 11 条真实草稿里 8 条标题层误红，
+    绝大多数不是「链接指错了」，而是政府站 <title> 形态太多——
+    「关于印发《X》的通知」「X（文号）_站点名」「站点名：X」。
+    比对只看「记录标题是否作为整体出现」，形态差异不该变成红项。
+    """
+    # 基底变体：原始标题 + 剥掉书名号与文号的标题
+    bases = [page_title.strip()]
+    # 剥书名号与文号
+    stripped = _DOC_NUMBER_PATTERN.sub("", page_title).replace("《", "").replace("》", "").strip()
+    # 非空且不同才补进来
+    if stripped and stripped != bases[0]:
+        # 补一个基底
+        bases.append(stripped)
+    # 候选集合
+    candidates: list[str] = []
+    # 对每个基底再按分隔符取第一段
+    for base in bases:
+        # 基底本身总在列
+        candidates.append(base)
+        # 按各分隔符切分
+        for sep in _TITLE_SEPARATORS:
+            # 含分隔符时补「第一段」
+            if sep in base:
+                # 取分隔符前
+                candidates.append(base.split(sep, 1)[0].strip())
     # 去掉空候选并去重（保持顺序）
     return list(dict.fromkeys(c for c in candidates if c))
 
 
 def check_title(policy: Policy, content: PageContent | None) -> list["CheckResult"]:
-    """检查层二：页面标题与记录标题的一致性。"""
+    """检查层二：页面标题与记录标题的一致性。
+
+    通过路径有三条（任一成立即绿，从严到宽）：
+    1. 归一化后互相包含（剥掉文号/书名号/站点后缀后是一回事）；
+    2. 归一化相似度达到阈值；
+    3. 记录标题完整出现在页面正文里——<title> 写得再怪，
+       正文含完整标题就是同一篇文件的铁证。
+    """
     # 检查项标识
     check_id = "title"
     # 页面取不到或正文不可用：标题比对无法进行。
@@ -495,9 +525,23 @@ def check_title(policy: Policy, content: PageContent | None) -> list["CheckResul
                 action={"kind": "acknowledge", "field": "title"},
             )],
         )]
-    # 计算最佳相似度：对各候选取最大值
+    # 归一化记录标题（压掉空白与标点，见 _squash 的说明）
+    record_core = _squash(policy.title)
+    # 归一化各候选
+    candidates = [_squash(c) for c in _title_candidates(content.title)]
+    # 路径一：互相包含——「关于印发《X》的通知」「X_站点名」都走这里
+    if record_core and any(record_core in cand or (cand and cand in record_core) for cand in candidates):
+        # 返回绿项
+        return [CheckResult(
+            check_id=check_id,
+            layer="标题比对",
+            status=STATUS_OK,
+            summary="页面标题经归一化后与记录一致（互相包含）",
+            evidence=[f"页面 <title>：{content.title}"],
+        )]
+    # 路径二：归一化相似度达阈值
     best = max(
-        (difflib.SequenceMatcher(None, cand, policy.title).ratio() for cand in _title_candidates(content.title)),
+        (difflib.SequenceMatcher(None, cand, record_core).ratio() for cand in candidates),
         default=0.0,
     )
     # 达到阈值：绿
@@ -510,7 +554,17 @@ def check_title(policy: Policy, content: PageContent | None) -> list["CheckResul
             summary=f"页面标题与记录一致（相似度 {best:.2f}）",
             evidence=[f"页面 <title>：{content.title}"],
         )]
-    # 低于阈值：红——很可能指向了另一篇文章
+    # 路径三：记录标题完整出现在正文里——<title> 是站名也别冤枉链接
+    if record_core and record_core in _squash(content.body_text):
+        # 返回绿项，但如实说明命中位置
+        return [CheckResult(
+            check_id=check_id,
+            layer="标题比对",
+            status=STATUS_OK,
+            summary="页面 <title> 未命中，但记录标题完整出现在页面正文 —— 同一篇文件",
+            evidence=[f"页面 <title>：{content.title}"],
+        )]
+    # 三条都不成立：红——很可能指向了另一篇文章
     return [CheckResult(
         check_id=check_id,
         layer="标题比对",

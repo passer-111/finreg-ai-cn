@@ -347,8 +347,11 @@ def test_title_error_when_page_is_another_article() -> None:
     """验证页面是另一篇文章时标红。"""
     # 构造记录
     policy = _policy_with_url()
-    # 一篇标题完全不同的页面
-    other_html = GOOD_PAGE_HTML.replace("某测试政策_某测试机构", "关于召开年度表彰大会的通知_某测试机构")
+    # 一篇标题完全不同的页面：全局替换文件名为另一篇
+    # （<title>、<h1>、首段三处一起换；只换 <title> 会命中
+    #   「标题出现在正文」的通过路径——那不是误报，
+    #   是这个 fixture 没造对「另一篇文章」）
+    other_html = GOOD_PAGE_HTML.replace("某测试政策", "关于召开年度表彰大会的通知")
     # 提取内容
     content = extract_content(other_html)
     # 检查
@@ -371,6 +374,59 @@ def test_title_manual_when_no_title_tag() -> None:
     results = check_title(policy, content)
     # manual：取不到证据不得当作通过，也不得冤枉记录
     assert results[0].status == STATUS_MANUAL
+
+
+def test_title_ok_when_wrapped_in_announcement() -> None:
+    """P2 路径一：「关于印发《X》的通知」式标题经归一化后判通过。"""
+    # 构造记录
+    policy = _policy_with_url()
+    # 印发通知式 <title>（政府站极常见形态）
+    wrapped_html = GOOD_PAGE_HTML.replace(
+        "<title>某测试政策_某测试机构</title>",
+        "<title>某测试机构关于印发《某测试政策》的通知</title>",
+    )
+    # 提取内容
+    content = extract_content(wrapped_html)
+    # 检查
+    results = check_title(policy, content)
+    # 绿
+    assert results[0].status == STATUS_OK
+
+
+def test_title_ok_when_doc_number_embedded() -> None:
+    """P2 路径一：标题里嵌发文字号（〔2026〕3号）经剥除后判通过。"""
+    # 构造记录
+    policy = _policy_with_url()
+    # 嵌文号的 <title>
+    numbered_html = GOOD_PAGE_HTML.replace(
+        "<title>某测试政策_某测试机构</title>",
+        "<title>某测试政策（某机构发〔2026〕3号）_某测试机构</title>",
+    )
+    # 提取内容
+    content = extract_content(numbered_html)
+    # 检查
+    results = check_title(policy, content)
+    # 绿
+    assert results[0].status == STATUS_OK
+
+
+def test_title_ok_when_title_is_site_name_but_body_matches() -> None:
+    """P2 路径三：<title> 只是站名、但记录标题完整出现在正文时判通过，
+    并在结论里如实说明命中位置。"""
+    # 构造记录
+    policy = _policy_with_url()
+    # <title> 只剩站名（SPA 页常见），正文仍含完整标题（<h1>）
+    site_title_html = GOOD_PAGE_HTML.replace(
+        "<title>某测试政策_某测试机构</title>", "<title>某测试机构</title>"
+    )
+    # 提取内容
+    content = extract_content(site_title_html)
+    # 检查
+    results = check_title(policy, content)
+    # 绿
+    assert results[0].status == STATUS_OK
+    # 结论如实说明是正文命中，而非 <title> 命中
+    assert "正文" in results[0].summary
 
 
 # ============================================================
