@@ -38,16 +38,22 @@ B 线建立了 ``data/drafts/``：一批未经人工核验的候选政策记录�
 
 # 导入 difflib 用于标题与义务概括的相似度计算（标准库，零新增依赖）
 import difflib
+# 导入 html 用于 DOCX 提取时的 XML 实体反转义（标准库）
+import html as html_lib
 # 导入 re 用于日期正则与条款号定位
 import re
+# 导入 zipfile 用于 DOCX（本质是 zip 包）文本提取（标准库，零新增依赖）
+import zipfile
 # 导入 dataclass 定义证据卡数据结构
 from dataclasses import dataclass, field
 # 导入 date 用于候选生效日期的构造
 from datetime import date
+# 导入 BytesIO 把下载的字节包装成文件对象供解析库消费
+from io import BytesIO
 # 导入 Path 用于定位草稿目录
 from pathlib import Path
-# 导入 urlparse 用于判断「重定向到站点首页」
-from urllib.parse import urlparse
+# 导入 urljoin 解析附件相对链接、urlparse 判断「重定向到站点首页」
+from urllib.parse import urljoin, urlparse
 # 导入 Any 用于类型标注
 from typing import Any
 
@@ -992,12 +998,219 @@ def _extract_clause_paragraph(text: str, match_start: int) -> str:
     return text[match_start:end]
 
 
-def check_obligations(policy: Policy, content: PageContent | None) -> list["CheckResult"]:
+# ============================================================
+# 附件取证（公告 + 附件型发布：PDF / DOCX）
+# ============================================================
+#
+# 为什么需要这一节：监管机构有一类发布形态是「公告页 + 附件」——
+# 公告页只有「经审议通过，现予发布」几百字，实体内容（章节条款）
+# 在附件 PDF/DOCX 里（如中基协的团体标准公告）。核验的四个检查层
+# 此前都假设「正文在 HTML 页面里」，对这类发布义务核对必然全灭。
+# 设计取舍：机器负责找附件、下载、提取文本、跑核对，人只做确认；
+# 附件下载/解析失败一律「需人工核」，绝不静默当作通过。
+# 老 .doc 二进制格式没有标准库解析方案，明确不支持（标 unsupported）。
+
+# 附件扩展名 → 类型标识（判断时剥掉查询串与锚点）
+_ATTACHMENT_EXTENSIONS = {".pdf": "pdf", ".docx": "docx", ".doc": "doc"}
+
+# 单个附件的下载上限：10MB。政府附件通常远小于此；
+# 设上限是防止异常页面把核验台拖进大文件下载
+ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
+
+# 每次出证最多尝试下载的附件个数：公告页可能列多个附件
+# （正文 + 解读 + 对照表），取到第一份可提取文本的即止，
+# 上限防止附件清单异常拉长时抓取成本失控
+ATTACHMENT_MAX_DOWNLOADS = 3
+
+
+@dataclass
+class AttachmentInfo:
+    """一个附件的取证结果（提取出的文本只留在内存，不进 JSON）。"""
+
+    # 附件绝对链接
+    url: str
+    # 类型：pdf / docx / doc
+    kind: str
+    # 取证状态：extracted（已提取文本）/ failed（下载或解析失败）/ unsupported（不支持的格式）
+    status: str
+    # 提取出的文本长度（供界面与台账展示，不存文本本身）
+    text_len: int = 0
+    # 失败原因；成功时为 None
+    error: str | None = None
+    # 提取出的全文（只供本次核对使用；不落盘、不进 to_dict——
+    # 仓库是元数据知识库，不是文档托管；取证时的判断依据由台账与
+    # 证据摘录承担，全文以官方链接为准）
+    text: str | None = field(default=None, repr=False)
+
+    def to_dict(self) -> dict[str, Any]:
+        """转为可 JSON 序列化的字典（不含文本本身）。"""
+        # 逐字段输出
+        return {
+            "url": self.url,                # 附件链接
+            "kind": self.kind,              # 类型
+            "status": self.status,          # 取证状态
+            "text_len": self.text_len,      # 文本长度
+            "error": self.error,            # 失败原因
+        }
+
+
+def extract_attachment_links(html: str, page_url: str) -> list[tuple[str, str]]:
+    """从公告页 HTML 中提取附件链接，返回 ``(绝对链接, 类型)`` 列表。
+
+    判定只看扩展名（剥掉查询串后），不看链接文字——各站点附件区的
+    文字五花八门（「附件：」「附件下载」「点击下载」），文字是不可靠
+    特征，扩展名才是。去重保序：同一附件被正文与下载区各链一次是常态。
+    """
+    # 解析 HTML
+    soup = BeautifulSoup(html, "lxml")
+    # 结果列表（保序去重）
+    links: list[tuple[str, str]] = []
+    # 已见集合
+    seen: set[str] = set()
+    # 遍历全部链接
+    for anchor in soup.find_all("a", href=True):
+        # 取 href 并剥掉查询串与锚点（?x=y 会影响扩展名判断）
+        clean = str(anchor["href"]).split("?")[0].split("#")[0]
+        # 取扩展名（小写）
+        suffix = Path(urlparse(clean).path).suffix.lower()
+        # 非附件扩展名：跳过
+        if suffix not in _ATTACHMENT_EXTENSIONS:
+            # 下一个
+            continue
+        # 解析为绝对链接（附件常为相对路径）
+        absolute = urljoin(page_url, str(anchor["href"]))
+        # 去重
+        if absolute in seen:
+            # 下一个
+            continue
+        # 登记
+        seen.add(absolute)
+        # 收录
+        links.append((absolute, _ATTACHMENT_EXTENSIONS[suffix]))
+    # 返回
+    return links
+
+
+def extract_pdf_text(pdf_bytes: bytes) -> str | None:
+    """从 PDF 字节中提取全文文本；失败或空文本返回 None。
+
+    pypdf 是本项目唯一的 PDF 依赖（纯 Python，无 C 扩展）。
+    延迟导入：让「不碰附件的代码路径」在未装 pypdf 的环境里
+    依然可跑——附件提取失败会如实标 failed，而不是 import 崩掉
+    整个核验层。
+    """
+    # 延迟导入 PDF 解析库
+    try:
+        # 导入读取器
+        from pypdf import PdfReader
+    except ImportError:
+        # 库未安装：明确失败（调用方标 failed，不静默）
+        return None
+    # 解析（PDF 格式千奇百怪，任何解析异常都视为提取失败）
+    try:
+        # 从字节构造读取器
+        reader = PdfReader(BytesIO(pdf_bytes))
+        # 逐页提取并拼接
+        text = "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+    except Exception:  # noqa: BLE001  解析失败不是程序错误，是这份 PDF 提取不了
+        # 返回失败
+        return None
+    # 空文本（扫描件图片 PDF）同样返回 None：扫描件要 OCR，
+    # 本项目不做 OCR——标 failed 让人工核，比返回空串静默通过诚实
+    return text or None
+
+
+def extract_docx_text(docx_bytes: bytes) -> str | None:
+    """从 DOCX 字节中提取全文文本；失败或空文本返回 None。
+
+    DOCX 本质是 zip 包，正文在 ``word/document.xml``——
+    标准库 zipfile + 正则足以提取，无需引入 python-docx。
+    """
+    # 解 zip 取主文档（损坏或非 docx 一律失败）
+    try:
+        # 打开 zip
+        with zipfile.ZipFile(BytesIO(docx_bytes)) as archive:
+            # 读主文档 XML
+            xml_text = archive.read("word/document.xml").decode("utf-8", errors="replace")
+    except Exception:  # noqa: BLE001  同上：提取失败不是程序错误
+        # 返回失败
+        return None
+    # 段落结束标签换成换行（否则整篇糊成一行，条款段落提取无法工作）
+    xml_text = re.sub(r"</w:p>", "\n", xml_text)
+    # 剥掉全部 XML 标签
+    text = re.sub(r"<[^>]+>", "", xml_text)
+    # XML 实体反转义（&amp; 等）
+    text = html_lib.unescape(text).strip()
+    # 空文本返回 None
+    return text or None
+
+
+def fetch_attachment(
+    url: str,
+    kind: str,
+    session: Any | None = None,
+    *,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> AttachmentInfo:
+    """下载一个附件并提取文本，返回取证结果（文本在 ``.text`` 里，只留内存）。
+
+    每一步失败都如实记录原因——下载失败、超过大小上限、格式不支持、
+    解析为空，都是「无法自动取证」的不同形态，界面要能看到区别。
+    """
+    # 不支持的格式（老 .doc 二进制）：直接标 unsupported，不下载
+    if kind == "doc":
+        # 返回不支持
+        return AttachmentInfo(url=url, kind=kind, status="unsupported",
+                              error="老 .doc 二进制格式无标准库解析方案，请人工下载核对")
+    # 会话：未注入时自建（与 fetch_page 同一约定）
+    http = session or _build_session()
+    # 下载
+    try:
+        # 发起请求
+        response = http.get(url, timeout=timeout)
+    except RequestException as exc:
+        # 网络层失败
+        return AttachmentInfo(url=url, kind=kind, status="failed",
+                              error=f"附件下载失败：{type(exc).__name__}: {exc}")
+    # 状态码检查
+    if response.status_code != 200:
+        # 非 200
+        return AttachmentInfo(url=url, kind=kind, status="failed",
+                              error=f"附件下载返回 HTTP {response.status_code}")
+    # 取字节内容
+    payload = response.content
+    # 大小上限
+    if len(payload) > ATTACHMENT_MAX_BYTES:
+        # 超限
+        return AttachmentInfo(url=url, kind=kind, status="failed",
+                              error=f"附件超过 {ATTACHMENT_MAX_BYTES // 1024 // 1024}MB 上限，未下载")
+    # 按类型提取文本
+    text = extract_pdf_text(payload) if kind == "pdf" else extract_docx_text(payload)
+    # 提取失败
+    if text is None:
+        # 返回失败（扫描件/损坏/库缺失都落在这里）
+        return AttachmentInfo(url=url, kind=kind, status="failed",
+                              error="附件文本提取失败（可能为扫描件或文件损坏）")
+    # 成功
+    return AttachmentInfo(url=url, kind=kind, status="extracted",
+                          text_len=len(text), text=text)
+
+
+def check_obligations(
+    policy: Policy,
+    content: PageContent | None,
+    *,
+    attachments: list[AttachmentInfo] | None = None,
+) -> list["CheckResult"]:
     """检查层四：关键义务条目与原文条款的核对。
 
     每条义务产一条检查结果（定位 / 重合度 / 情态词三者合并报告）。
     草稿阶段 ``key_obligations`` 通常为空——此时本层绿，
     并说明「无义务条目」（空的义务清单是草稿的合法状态）。
+
+    ``attachments`` 是公告页上发现的附件取证结果：凡提取出文本的
+    附件都会作为第二检索空间参与条款定位（公告 + 附件型发布的
+    实体内容在附件里，只搜公告页必然全灭）。
     """
     # 无义务条目：绿，如实说明
     if not policy.key_obligations:
@@ -1027,6 +1240,16 @@ def check_obligations(policy: Policy, content: PageContent | None) -> list["Chec
 
     # 结果容器
     results: list[CheckResult] = []
+    # 附件列表（默认空）
+    attachments = attachments or []
+    # 已成功提取文本的附件：作为第二检索空间（公告页正文优先，
+    # 附件全文其次——实体内容在附件的发布形态下，公告页只有几百字导语）
+    extracted_spaces = [(a.url, a.text) for a in attachments
+                        if a.status == "extracted" and a.text]
+    # 检索空间序列：（空间名, 文本）
+    search_spaces: list[tuple[str, str]] = [("公告页", content.body_text)]
+    # 追加附件空间
+    search_spaces.extend((f"附件（{url.rsplit('/', 1)[-1]}）", text) for url, text in extracted_spaces)
     # 页面是否确为该文件全文（定位失败的红/需人工核分流要靠它——
     # 与日期层同一条铁律：「0 命中 → 下结论」前必须先证明拿到的是全文。
     # P3 实测：shell 页/机构首页上 25 条义务被误报「条款号填写有误」，
@@ -1038,20 +1261,88 @@ def check_obligations(policy: Policy, content: PageContent | None) -> list["Chec
         check_id = f"obligation:{index}"
         # 编译条款定位正则
         pattern = _clause_pattern(obligation.clause)
-        # 正则定位（匹配「第 X 条」或「（X）」两种编号形态）
-        match = pattern.search(content.body_text) if pattern else None
-        # 字面回退：无法编译出数字语义时按原字符串查找。
-        # 注释曾承诺这条路径但代码从未实现（``if pattern else None``），
-        # P3 校准才发现——「（十五）」之外的非数字 clause（如「附件」）
-        # 在此之前必然定位失败
-        literal_start = -1
-        # 仅在正则不可用且正则未命中时尝试
-        if match is None and pattern is None:
-            # 原字符串精确查找
-            literal_start = content.body_text.find(obligation.clause.strip())
+        # 依次在各检索空间定位：正则（「第 X 条」或「（X）」）优先，
+        # 字面回退（无数字语义的 clause，如「附件」）其次——
+        # 字面回退曾长期被注释承诺而未实现（P3 发现），勿再退化为
+        # ``if pattern else None``。
+        hit_space: str | None = None      # 命中空间名
+        hit_text = ""                     # 命中空间的文本
+        hit_start = -1                    # 命中位置
+        # 逐空间查找
+        for space_name, space_text in search_spaces:
+            # 正则定位
+            match = pattern.search(space_text) if pattern else None
+            # 记录命中
+            if match:
+                # 命中空间
+                hit_space, hit_text, hit_start = space_name, space_text, match.start()
+                # 命中即停
+                break
+            # 字面回退（仅正则不可用时）
+            if pattern is None:
+                # 原字符串精确查找
+                literal_start = space_text.find(obligation.clause.strip())
+                # 记录命中
+                if literal_start >= 0:
+                    # 命中空间
+                    hit_space, hit_text, hit_start = space_name, space_text, literal_start
+                    # 命中即停
+                    break
         # 定位失败
-        if match is None and literal_start < 0:
-            # 分流：页面不是该文件全文时是取证失败（需人工核），
+        if hit_space is None:
+            # 分流一：附件全文已检索仍未找到——附件就是实体全文，
+            # 找不到是证据冲突（红），与「全文页上找不到」同性质
+            if extracted_spaces:
+                # 追加红项
+                results.append(CheckResult(
+                    check_id=check_id,
+                    layer="义务核对",
+                    status=STATUS_ERROR,
+                    summary=(
+                        f"第 {obligation.clause} 条：公告页与附件全文均未定位到该条款"
+                        " —— 条款号可能填写有误"
+                    ),
+                    evidence=[f"义务概括：{obligation.summary}",
+                              f"已检索附件：{'、'.join(url for url, _ in extracted_spaces)}"],
+                    options=[
+                        CheckOption(
+                            key="confirm-clause",
+                            label="我已人工定位到原文条款，维持该条目",
+                            action={"kind": "acknowledge", "field": f"obligation:{index}"},
+                        ),
+                        CheckOption(
+                            key="drop-obligation",
+                            label="删除该义务条目（无法找到原文依据）",
+                            action={"kind": "drop-obligation", "index": index},
+                        ),
+                    ],
+                ))
+                # 继续下一条
+                continue
+            # 分流二：页面有附件但一个都没提取出来——实体内容很可能在
+            # 附件里，此时公告页含标题不代表拿到全文（附件型公告的标题
+            # 就写在公告里），标红会重蹈「取证失败误报证据冲突」的覆辙
+            if attachments:
+                # 追加需人工核项
+                results.append(CheckResult(
+                    check_id=check_id,
+                    layer="义务核对",
+                    status=STATUS_MANUAL,
+                    summary=(
+                        f"第 {obligation.clause} 条：公告页未定位到，且附件无法自动提取"
+                        "（实体内容可能在附件中）—— 无法自动取证，需人工核"
+                    ),
+                    evidence=[f"义务概括：{obligation.summary}",
+                              f"附件状态：{'；'.join(f'{a.url}（{a.error or a.status}）' for a in attachments)}"],
+                    options=[CheckOption(
+                        key="confirm-clause",
+                        label="我已下载附件人工核对原文该条款",
+                        action={"kind": "acknowledge", "field": f"obligation:{index}"},
+                    )],
+                ))
+                # 继续下一条
+                continue
+            # 分流三：无附件——页面不是全文是取证失败（需人工核），
             # 是全文却找不到才是证据冲突（红）
             if not is_full_text:
                 # 追加需人工核项
@@ -1094,10 +1385,8 @@ def check_obligations(policy: Policy, content: PageContent | None) -> list["Chec
             ))
             # 继续下一条
             continue
-        # 段落起点：正则命中位置或字面命中位置
-        paragraph_start = match.start() if match else literal_start
-        # 取出该条款的完整段落
-        paragraph = _extract_clause_paragraph(content.body_text, paragraph_start)
+        # 取出该条款的完整段落（在命中空间的文本里取）
+        paragraph = _extract_clause_paragraph(hit_text, hit_start)
         # 计算概括与原段的重合度（归一化后比对，消除排版差异）
         overlap = difflib.SequenceMatcher(None, obligation.summary, paragraph).ratio()
         # 情态词检查：段落里的表述与义务类型是否一致
@@ -1123,9 +1412,9 @@ def check_obligations(policy: Policy, content: PageContent | None) -> list["Chec
                 status=STATUS_ERROR,
                 summary=(
                     f"第 {obligation.clause} 条：概括与原段文本重合度 {overlap:.2f} 低于阈值 "
-                    f"{OBLIGATION_OVERLAP_THRESHOLD} —— 概括可能并非出自该条款"
+                    f"{OBLIGATION_OVERLAP_THRESHOLD} —— 概括可能并非出自该条款（出自{hit_space}）"
                 ),
-                evidence=[f"义务概括：{obligation.summary}", f"原段摘录：{paragraph[:300]}"],
+                evidence=[f"义务概括：{obligation.summary}", f"原段摘录（{hit_space}）：{paragraph[:300]}"],
                 options=[
                     CheckOption(
                         key="confirm-summary",
@@ -1178,8 +1467,11 @@ def check_obligations(policy: Policy, content: PageContent | None) -> list["Chec
             check_id=check_id,
             layer="义务核对",
             status=STATUS_OK,
-            summary=f"第 {obligation.clause} 条：条款定位成功，概括与原段一致（重合度 {overlap:.2f}）",
-            evidence=[f"原段摘录：{paragraph[:200]}"],
+            summary=(
+                f"第 {obligation.clause} 条：条款定位成功，概括与原段一致"
+                f"（重合度 {overlap:.2f}，出自{hit_space}）"
+            ),
+            evidence=[f"原段摘录（{hit_space}）：{paragraph[:200]}"],
         ))
     # 返回全部结果
     return results
@@ -1255,6 +1547,8 @@ class EvidenceCard:
     checks: list[CheckResult]
     # 取证时间（北京时间 ISO 字符串）
     generated_at: str = field(default_factory=now_china_iso)
+    # 公告页上发现的附件取证结果（无附件时为空列表）
+    attachments: list[AttachmentInfo] = field(default_factory=list)
 
     def pending_checks(self) -> list[CheckResult]:
         """返回需要人判断的检查项（黄 / 红 / 需人工核）。
@@ -1288,6 +1582,7 @@ class EvidenceCard:
             "pending_count": len(self.pending_checks()),        # 待判断项数
             "counts": self.count_by_status(),                   # 状态统计
             "checks": [c.to_dict() for c in self.checks],       # 检查项明细
+            "attachments": [a.to_dict() for a in self.attachments],  # 附件取证结果
         }
 
 
@@ -1296,11 +1591,34 @@ def build_evidence_card(policy: Policy, session: Any | None = None) -> EvidenceC
 
     抓取失败时 ``content`` 为 None，各层自行决定标 error 还是 manual——
     唯一不允许的是「当没发生」。
+
+    公告页上发现附件（PDF/DOCX）时会顺带做附件取证：下载并提取
+    文本，作为义务核对层的第二检索空间；每个附件的取证结果
+    （成功/失败/不支持）都记录在证据卡上，界面可见。
     """
     # 抓取官方页面
     page = fetch_page(policy.source.url, session)
     # 页面拿到时才提取内容；否则内容为 None（各层标 manual/error）
     content = extract_content(page.html) if page.ok and page.html is not None else None
+    # 附件取证：页面有附件链接时逐个尝试（上限防成本失控），
+    # 取到第一份可提取文本的附件后仍继续记录其余链接的状态吗？——
+    # 不继续：政策正文通常只有一个主附件，继续下载是浪费；
+    # 但一旦开始下载，每个试过的附件都要留下状态记录
+    attachments: list[AttachmentInfo] = []
+    # 仅当拿到页面 HTML 时才找附件
+    if page.ok and page.html is not None:
+        # 提取附件链接
+        links = extract_attachment_links(page.html, policy.source.url)
+        # 逐个尝试（含上限）
+        for attachment_url, kind in links[:ATTACHMENT_MAX_DOWNLOADS]:
+            # 下载并提取
+            info = fetch_attachment(attachment_url, kind, session)
+            # 记录结果
+            attachments.append(info)
+            # 已拿到可用文本：停止（主附件通常就是第一个）
+            if info.status == "extracted":
+                # 停止尝试
+                break
     # 依次执行四个检查层并合并结果
     checks: list[CheckResult] = []
     # 层一：可达性
@@ -1309,14 +1627,15 @@ def build_evidence_card(policy: Policy, session: Any | None = None) -> EvidenceC
     checks.extend(check_title(policy, content))
     # 层三：日期与状态取证
     checks.extend(check_dates(policy, content))
-    # 层四：义务清单核对
-    checks.extend(check_obligations(policy, content))
+    # 层四：义务清单核对（附件全文作为第二检索空间）
+    checks.extend(check_obligations(policy, content, attachments=attachments))
     # 组装证据卡
     return EvidenceCard(
         policy_id=policy.id,          # 草稿 id
         title=policy.title,           # 标题
         url=policy.source.url,        # 官方链接
         checks=checks,                # 检查项
+        attachments=attachments,      # 附件取证结果
     )
 
 
@@ -1431,6 +1750,16 @@ def render_card_lines(card: EvidenceCard) -> list[str]:
     lines.append(f"■ {card.policy_id}  {card.title}")
     # 官方链接
     lines.append(f"  {card.url}")
+    # 附件取证结果（有附件时逐条展示状态——成功/失败/不支持要一眼可辨）
+    for attachment in card.attachments:
+        # 已提取：显示文本长度
+        if attachment.status == "extracted":
+            # 输出行
+            lines.append(f"  📎 附件已提取（{attachment.text_len} 字）：{attachment.url}")
+        # 失败/不支持：显示原因
+        else:
+            # 输出行
+            lines.append(f"  📎 附件{attachment.status}：{attachment.url} —— {attachment.error or ''}")
     # 逐项输出
     for check in card.checks:
         # 状态标记

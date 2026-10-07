@@ -54,6 +54,7 @@ class FakeResponse:
         status_code: int = 200,         # HTTP 状态码
         encoding: str = "utf-8",        # 响应头声明的编码
         apparent_encoding: str = "utf-8",  # 从内容探测出的编码
+        content: bytes | None = None,   # 二进制正文（附件下载用；None 时由 text 编码得到）
     ) -> None:
         """按参数构造伪造响应。"""
         # 保存正文
@@ -64,8 +65,19 @@ class FakeResponse:
         self.encoding = encoding
         # 保存探测出的编码
         self.apparent_encoding = apparent_encoding
+        # 显式二进制正文（附件取证用）
+        self._explicit_content = content
         # 响应头，抓取器目前不用，但保留以免将来 AttributeError
         self.headers: dict[str, str] = {}
+
+    @property
+    def content(self) -> bytes:
+        """二进制正文。延迟编码：构造时不碰 text —— gb2312 等编码下
+        fixture 文本可能含该编码无法表示的字符，构造期 encode 会让
+        异常在 FakeSession.get 内部（抓取器的 try 里）炸出，
+        把好好的测试变成「抓取失败」。谁真的读 content 谁承担编码。"""
+        # 显式字节优先；否则按声明编码现场编码
+        return self._explicit_content if self._explicit_content is not None else self.text.encode(self.encoding)
 
     def json(self) -> Any:
         """把正文按 JSON 解析后返回。

@@ -448,13 +448,27 @@ def _render_card_panel(state: ConsoleState, policy_id: str) -> str:
         f'size="40" required>'
         f'<button type="submit">退回草稿</button></form>'
     )
+    # 附件取证结果：成功/失败/不支持逐条可见——附件型发布（公告+PDF）
+    # 的实体内容在附件里，附件状态不展示，人无从判断机器到底核了什么
+    attachments_html = ""
+    # 有附件时渲染
+    if card.attachments:
+        # 逐条渲染
+        items = "".join(
+            f'<li><a href="{_esc(a.url)}">{_esc(a.url)}</a> —— '
+            + (f"已提取 {a.text_len} 字" if a.status == "extracted" else _esc(a.error or a.status))
+            + "</li>"
+            for a in card.attachments
+        )
+        # 组装块
+        attachments_html = f'<p class="muted">附件取证：</p><ul class="muted">{items}</ul>'
     # 组装面板
     return (
         f'<div class="card">'
         f"<h2>{_esc(card.title)}</h2>"
         f'<p class="muted">{_esc(card.policy_id)} · 取证于 {_esc(card.generated_at)}</p>'
         f'<p><a href="{_esc(card.url)}">{_esc(card.url)}</a></p>'
-        f"{refetch_html}{green_html}{pending_html}<hr>{promote_html}{reject_html}</div>"
+        f"{attachments_html}{refetch_html}{green_html}{pending_html}<hr>{promote_html}{reject_html}</div>"
     )
 
 

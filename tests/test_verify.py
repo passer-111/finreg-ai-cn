@@ -24,6 +24,10 @@
 from datetime import date
 # 导入 json：验证证据卡可 JSON 序列化（界面与 --json 输出依赖这一点）
 import json
+# 导入 zipfile：测试内现场构造 DOCX（本质是 zip 包），保持全离线
+import zipfile
+# 导入 BytesIO：把构造的字节包装成文件对象
+from io import BytesIO
 
 # 导入 pytest 以使用装置与参数化
 import pytest
@@ -34,12 +38,17 @@ from finreg_ai.verify import (
     STATUS_MANUAL,           # 需人工核
     STATUS_OK,               # 绿：机器通过
     STATUS_WARNING,          # 黄：待判断
+    AttachmentInfo,          # 附件取证结果（构造注入用）
     build_evidence_card,     # 单条出证（贯穿入口）
     check_dates,             # 层三
     check_obligations,       # 层四
     check_reachability,      # 层一
     check_title,             # 层二
+    extract_attachment_links,  # 附件链接发现
     extract_content,         # 页面文本提取
+    extract_docx_text,       # DOCX 文本提取
+    extract_pdf_text,        # PDF 文本提取
+    fetch_attachment,        # 附件下载与提取
     fetch_page,              # 页面抓取（FakeSession 注入点）
     find_effective_date_candidates,  # 候选日期提取
     load_drafts,             # 草稿加载
@@ -904,6 +913,263 @@ def test_load_drafts_reports_missing_directory(tmp_path) -> None:
     assert drafts == {}
     # 明确报错
     assert any("不存在" in e for e in errors)
+
+
+# ============================================================
+# 附件取证（公告 + 附件型发布）
+# ============================================================
+#
+# 背景：监管机构有一类发布形态是「公告页 + 附件 PDF/DOCX」——
+# 公告页只有几百字导语，实体条款在附件里。义务核对层必须能把
+# 附件文本作为第二检索空间，且附件提取失败时标「需人工核」
+# 而不是在公告页上找不到就标红（铁律 5 的附件形态）。
+
+# 附件型公告页固定装置：标题在公告里（这是铁律 5 的陷阱形态——
+# 公告含标题会让 _page_contains_document 误判为全文），
+# 但正文只有导语，条款在附件里
+ANNOUNCEMENT_PAGE_HTML = """
+<html><head><title>关于发布《某测试政策》的公告_某测试机构</title></head><body>
+<header>某测试机构 导航 首页 政策法规 通知公告 政务公开 互动交流 办事服务
+热点专题 信用信息 统计信息 人员招聘 联系我们 网站地图 english 搜索</header>
+<main>
+<h1>关于发布《某测试政策》的公告</h1>
+<p>根据有关规定，协会组织制定了《某测试政策》，经审议通过，现予发布，自公布之日起实施。特此公告。</p>
+<p>附件：<a href="/files/zc/2026/test-policy.docx">某测试政策</a></p>
+<p>某测试机构 2026年4月3日</p>
+</main>
+<footer>版权所有 某测试机构 京ICP备00000000号 京公网安备 110000000000号
+建议使用 1024*768 以上分辨率浏览本站 流量统计 网站声明 联系我们</footer>
+</body></html>
+"""
+
+
+def _make_docx_bytes(paragraphs: list[str]) -> bytes:
+    """在内存中构造一个最小 DOCX（zip + word/document.xml），返回字节。
+
+    测试必须全离线且不得依赖二进制 fixture 文件——现场构造是
+    唯一的干净方式（DOCX 本质是 zip，标准库足够）。
+    """
+    # 段落拼成 w:p 结构
+    body = "".join(f"<w:p><w:r><w:t>{p}</w:t></w:r></w:p>" for p in paragraphs)
+    # 最小 document.xml
+    document = f'<?xml version="1.0"?><w:document><w:body>{body}</w:body></w:document>'
+    # 内存 zip
+    buffer = BytesIO()
+    # 写入
+    with zipfile.ZipFile(buffer, "w") as archive:
+        # 主文档
+        archive.writestr("word/document.xml", document)
+    # 返回字节
+    return buffer.getvalue()
+
+
+def test_extract_attachment_links_finds_and_resolves() -> None:
+    """验证附件链接发现：识别扩展名、解析相对路径、去重、忽略非附件。"""
+    # 页面里：一个相对 docx（正文与下载区各链一次）、一个 pdf、一个普通链接
+    page = (
+        '<a href="/files/a.docx">政策正文</a>'
+        '<a href="/files/a.docx">附件下载：政策正文</a>'
+        '<a href="https://static.example.gov.cn/b.pdf?ts=123">解读材料</a>'
+        '<a href="/about.html">关于我们</a>'
+    )
+    # 提取
+    links = extract_attachment_links(page, "https://example.gov.cn/notice/2026/c_1.htm")
+    # 两个附件（docx 去重后一个 + pdf 一个）
+    assert links == [
+        ("https://example.gov.cn/files/a.docx", "docx"),
+        ("https://static.example.gov.cn/b.pdf?ts=123", "pdf"),
+    ]
+
+
+def test_extract_docx_text_roundtrip() -> None:
+    """验证 DOCX 提取：现场构造的 DOCX 能取回中文段落且段落边界保留。"""
+    # 构造
+    payload = _make_docx_bytes(["第十六条 金融机构应当开展合规评估。", "第十七条 不得滥用数据。"])
+    # 提取
+    text = extract_docx_text(payload)
+    # 非空
+    assert text is not None
+    # 内容完整
+    assert "第十六条" in text and "合规评估" in text
+    # 段落边界保留为换行（条款段落提取依赖它）
+    assert "\n" in text
+    # 损坏输入明确返回 None（不抛异常、不静默返回空串）
+    assert extract_docx_text(b"not a zip at all") is None
+
+
+def _make_pdf_bytes(text: str) -> bytes:
+    """构造一个带完整 xref 表的最小合法 PDF（单页、WinAnsi 文本）。
+
+    pypdf 6.x 强制要求 startxref——不再像老版本那样容错重建，
+    因此 xref 偏移量必须逐字节算对。只用 ASCII：中文文本流需要
+    CID 字体表，那属于 pypdf 自己的测试范围，不是本项目的。
+    """
+    # 文本流（Tj 显示文本）
+    stream = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode("ascii")
+    # 五个间接对象
+    objects = [
+        b"<</Type/Catalog/Pages 2 0 R>>",                                       # 1 目录
+        b"<</Type/Pages/Kids[3 0 R]/Count 1>>",                                 # 2 页树
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]"                      # 3 页面
+        b"/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>",
+        b"<</Length " + str(len(stream)).encode("ascii") + b">>\nstream\n"      # 4 内容流
+        + stream + b"\nendstream",
+        b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",                     # 5 字体
+    ]
+    # 逐对象拼接并记录偏移
+    body = b"%PDF-1.4\n"
+    # 偏移表
+    offsets: list[int] = []
+    # 逐个写入
+    for number, obj in enumerate(objects, start=1):
+        # 记录本对象起始偏移
+        offsets.append(len(body))
+        # 拼接对象
+        body += f"{number} 0 obj".encode("ascii") + obj + b"\nendobj\n"
+    # xref 表起始偏移
+    xref_start = len(body)
+    # 拼 xref 表（含第 0 号空闲对象）
+    xref = b"xref\n0 " + str(len(objects) + 1).encode("ascii") + b"\n"
+    # 空闲对象行
+    xref += b"0000000000 65535 f \n"
+    # 各对象行（10 位偏移 + 代际号 + n）
+    for offset in offsets:
+        # 追加一行
+        xref += f"{offset:010d} 00000 n \n".encode("ascii")
+    # trailer 与 startxref
+    trailer = (b"trailer<</Size " + str(len(objects) + 1).encode("ascii")
+               + b"/Root 1 0 R>>\nstartxref\n"
+               + str(xref_start).encode("ascii") + b"\n%%EOF\n")
+    # 返回完整字节
+    return body + xref + trailer
+
+
+def test_extract_pdf_text_smoke_with_real_pypdf() -> None:
+    """冒烟：真实 pypdf 能解析一个最小合法 PDF（验证依赖本身可用）。"""
+    # 提取
+    text = extract_pdf_text(_make_pdf_bytes("Hello PDF"))
+    # 非空且含文本
+    assert text is not None and "Hello PDF" in text
+    # 垃圾输入明确返回 None
+    assert extract_pdf_text(b"%%PDF broken") is None
+
+
+def test_fetch_attachment_downloads_and_extracts_docx() -> None:
+    """验证附件下载提取：状态、文本长度、失败路径都如实记录。"""
+    # 构造 DOCX 字节
+    payload = _make_docx_bytes(["第十六条 金融机构应当开展合规评估。"])
+    # 伪造会话：附件地址返回字节
+    session = FakeSession(lambda url: FakeResponse(content=payload))
+    # 下载提取
+    info = fetch_attachment("https://example.gov.cn/files/a.docx", "docx", session)
+    # 成功
+    assert info.status == "extracted"
+    # 文本在内存里
+    assert info.text is not None and "第十六条" in info.text
+    # 长度记录
+    assert info.text_len == len(info.text)
+    # 失败路径：404
+    session_404 = FakeSession(lambda url: FakeResponse(text="nf", status_code=404))
+    # 下载
+    info_404 = fetch_attachment("https://example.gov.cn/files/a.docx", "docx", session_404)
+    # 明确失败
+    assert info_404.status == "failed" and "404" in (info_404.error or "")
+    # 不支持的格式：老 .doc 不下载直接标 unsupported
+    info_doc = fetch_attachment("https://example.gov.cn/files/a.doc", "doc", session)
+    # 不支持
+    assert info_doc.status == "unsupported"
+
+
+def test_obligations_locate_in_attachment_when_page_is_announcement() -> None:
+    """核心场景：公告页只有导语，条款在附件里——义务核对搜附件全文。"""
+    # 义务概括与附件中的条款一致
+    policy = _policy_with_obligation("金融机构应当每年开展一次人工智能应用合规评估并向监管机构报送评估报告")
+    # 公告页内容（正文可用但无条款）
+    content = extract_content(ANNOUNCEMENT_PAGE_HTML)
+    # 附件已提取文本（含第十六条）
+    attachments = [AttachmentInfo(
+        url="https://example.gov.cn/files/test-policy.docx", kind="docx", status="extracted",
+        text_len=80, text="第十六条 金融机构应当每年开展一次人工智能应用合规评估，并向监管机构报送评估报告。",
+    )]
+    # 检查
+    results = check_obligations(policy, content, attachments=attachments)
+    # 绿
+    assert results[0].status == STATUS_OK
+    # 结论注明出自附件（人要知道机器核的是哪份文本）
+    assert "附件" in results[0].summary
+
+
+def test_obligations_error_when_clause_absent_from_both_page_and_attachment() -> None:
+    """验证附件全文已检索仍未找到时标红——附件就是实体全文，找不到是证据冲突。"""
+    # 构造含第九十九条义务的记录（公告页与附件都没有）
+    policy = _policy_with_obligation("某条不存在的义务", clause="九十九")
+    # 公告页内容
+    content = extract_content(ANNOUNCEMENT_PAGE_HTML)
+    # 附件已提取（内容是别的条款）
+    attachments = [AttachmentInfo(
+        url="https://example.gov.cn/files/test-policy.docx", kind="docx", status="extracted",
+        text_len=40, text="第十六条 金融机构应当每年开展一次合规评估。",
+    )]
+    # 检查
+    results = check_obligations(policy, content, attachments=attachments)
+    # 红
+    assert results[0].status == STATUS_ERROR
+    # 结论说明两边都搜过
+    assert "附件" in results[0].summary
+
+
+def test_obligations_manual_when_attachment_extraction_failed_on_announcement() -> None:
+    """铁律 5 的附件形态：公告含标题（看似全文）但条款在提取失败的附件里——必须 manual 而非红。
+
+    这是本组测试的灵魂：公告型页面的标题命中会让
+    ``_page_contains_document`` 判 True，若没有「有附件但提取失败」
+    这道分流，义务核对会在只搜了导语的情况下报「条款号填写有误」——
+    取证失败被误报成证据冲突。
+    """
+    # 构造含第九十九条义务的记录
+    policy = _policy_with_obligation("某条义务", clause="九十九")
+    # 公告页内容（含标题，正文可用）
+    content = extract_content(ANNOUNCEMENT_PAGE_HTML)
+    # 附件提取失败（扫描件/损坏）
+    attachments = [AttachmentInfo(
+        url="https://example.gov.cn/files/test-policy.docx", kind="docx", status="failed",
+        error="附件文本提取失败（可能为扫描件或文件损坏）",
+    )]
+    # 检查
+    results = check_obligations(policy, content, attachments=attachments)
+    # manual 而非 error
+    assert results[0].status == STATUS_MANUAL
+    # 结论说明实体内容可能在附件
+    assert "附件" in results[0].summary
+
+
+def test_build_evidence_card_fetches_attachment_end_to_end() -> None:
+    """端到端：公告页 + DOCX 附件，证据卡的义务核对走附件文本并记录附件状态。"""
+    # 义务概括与附件条款一致
+    policy = _policy_with_obligation("金融机构应当每年开展一次人工智能应用合规评估并向监管机构报送评估报告")
+    # 附件字节
+    payload = _make_docx_bytes([
+        "第十六条 金融机构应当每年开展一次人工智能应用合规评估，并向监管机构报送评估报告。",
+    ])
+    # 路由：公告页返回 HTML，附件返回 DOCX 字节
+    session = FakeSession(lambda url: (
+        FakeResponse(content=payload) if url.endswith(".docx")
+        else FakeResponse(text=ANNOUNCEMENT_PAGE_HTML, status_code=200)
+    ))
+    # 出证
+    card = build_evidence_card(policy, session)
+    # 附件被记录且提取成功
+    assert len(card.attachments) == 1
+    # 成功
+    assert card.attachments[0].status == "extracted"
+    # 义务核对绿且出自附件
+    obligation_results = [c for c in card.checks if c.layer == "义务核对"]
+    # 绿
+    assert obligation_results[0].status == STATUS_OK
+    # 出自附件
+    assert "附件" in obligation_results[0].summary
+    # 证据卡可 JSON 序列化（P5 落盘路径依赖这一点，附件文本不得混入）
+    json.dumps(card.to_dict(), ensure_ascii=False)
 
 
 if __name__ == "__main__":
