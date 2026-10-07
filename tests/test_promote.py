@@ -199,6 +199,58 @@ def test_promote_moves_file_and_rewrites_fields(tmp_path) -> None:
     assert promote_entry["decisions"][0]["option_key"] == "adopt:2026-07-01"
 
 
+def test_promote_persists_evidence_card(tmp_path) -> None:
+    """验证证据卡落盘：cards/<id>.json 存在、内容完整、台账引用路径。
+
+    复查入口是这张卡的全部意义：台账条目里只有判断与摘录条数，
+    事后要回答「当时机器看到了什么」只能靠落盘的完整卡片——
+    重新抓取没有意义，页面内容会变。
+    """
+    # 目录布局
+    drafts = tmp_path / "drafts"
+    # 政策目录
+    policies = tmp_path / "policies"
+    # 台账目录
+    logs = tmp_path / "logs"
+    # 写草稿
+    policy = make_policy(effective_from=None, verified_by=VerifiedBy.AUTOMATED)
+    # 写文件
+    _write_draft(drafts, policy)
+    # 构造证据卡与判断
+    card = _make_card(policy.id, [_date_warning_check()])
+    # 判断
+    decision = Decision(
+        check_id="date", option_key="adopt:2026-07-01", label="采纳候选日期 2026-07-01",
+        action={"kind": "set-field", "field": "effective_from", "value": "2026-07-01"},
+    )
+    # 入库
+    result = promote_draft(
+        policy.id, [decision], card,
+        drafts_dir=drafts, policies_dir=policies, log_dir=logs,
+        today=FIXED_DAY, validator=lambda: [],
+    )
+    # 成功
+    assert result.ok
+    # 结果对象携带卡片路径
+    assert result.card_path == logs / "cards" / f"{policy.id}.json"
+    # 卡片文件存在
+    assert result.card_path is not None and result.card_path.exists()
+    # 读回验证内容完整
+    payload = json.loads(result.card_path.read_text(encoding="utf-8"))
+    # 政策 id 一致
+    assert payload["policy_id"] == policy.id
+    # 检查项完整保留（这是「当时机器看到了什么」的全部证据）
+    assert len(payload["checks"]) == len(card.checks)
+    # 附入库日期
+    assert payload["promoted_on"] == FIXED_DAY.isoformat()
+    # 台账条目引用卡片相对路径（相对路径：日志只增不改，不能写死绝对路径）
+    log_lines = (logs / f"{FIXED_DAY.isoformat()}.jsonl").read_text(encoding="utf-8").splitlines()
+    # 取 promote 条目
+    promote_entry = next(json.loads(line) for line in log_lines if json.loads(line)["kind"] == "promote")
+    # 引用路径
+    assert promote_entry["card_path"] == f"cards/{policy.id}.json"
+
+
 def test_promote_refuses_when_checks_undecided(tmp_path) -> None:
     """验证状态机拒绝：红项未清零时不动任何文件、不写台账。"""
     # 目录布局
@@ -282,6 +334,9 @@ def test_promote_rolls_back_when_validation_fails(tmp_path) -> None:
     rollback_entry = json.loads(log_lines[1])
     # 含错误
     assert "ghost" in str(rollback_entry["errors"])
+    # 证据卡保留备查——回滚撤销的是「入库」这个结果，
+    # 不是「人工基于这些证据做过一次尝试」这个事实
+    assert (logs / "cards" / f"{policy.id}.json").exists()
 
 
 def test_promote_refuses_to_overwrite_existing_policy(tmp_path) -> None:

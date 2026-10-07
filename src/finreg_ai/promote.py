@@ -109,6 +109,8 @@ class PromoteResult:
     messages: list[str] = field(default_factory=list)
     # 台账文件路径
     log_path: Path | None = None
+    # 落盘的证据卡路径（cards/<id>.json）；失败时为 None
+    card_path: Path | None = None
 
 
 # ============================================================
@@ -190,6 +192,37 @@ def log_decision(log_dir: Path, policy_id: str, decision: Decision,
     )
     # 追加并返回路径
     return append_log_entry(log_dir, entry, today)
+
+
+def persist_card(log_dir: Path, policy_id: str, card: EvidenceCard, today: date) -> Path:
+    """把完整证据卡落盘为 ``cards/<id>.json``，返回文件路径。
+
+    为什么入库时要落盘：台账条目里只有判断与证据摘录条数，事后想复查
+    「当时机器到底看到了什么」必须有一张完整卡片；重新抓取没有意义——
+    页面内容会变，当时看到的证据才是判断的依据。
+    回滚时**不删除**这张卡：它记录的是「人工基于哪些证据做过一次入库
+    尝试」，尝试本身也是审计事实（台账里的 promote/rollback 条目也还在）。
+    """
+    # 卡片子目录
+    cards_dir = log_dir / "cards"
+    # 确保目录存在
+    cards_dir.mkdir(parents=True, exist_ok=True)
+    # 卡片内容：证据卡本体 + 入库日期（卡片自身不带时间概念）
+    payload = card.to_dict()
+    # 附入库日期（北京时间，与台账按日分文件一致）
+    payload["promoted_on"] = today.isoformat()
+    # 目标路径（同一政策多次入库尝试时覆盖旧卡：旧尝试的证据在旧卡被覆盖前
+    # 已随当日台账条目留档——条目里有判断与摘录条数；卡片只保留最近一次，
+    # 否则 cards/ 会随每次失败尝试无限堆积，而堆积的卡片没有检索入口）
+    path = cards_dir / f"{policy_id}.json"
+    # 写入（缩进便于人工直接阅读）
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        # 序列化
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+        # 尾换行（与仓库文本约定一致）
+        fh.write("\n")
+    # 返回
+    return path
 
 
 # ============================================================
@@ -310,7 +343,7 @@ def promote_draft(
     ① 决策状态机检查——红/黄/需人工核项未清零时拒绝；
     ② 应用判断动作改写字段，verified_by → human，last_verified → 当天；
     ③ 写入 data/policies/ 并删除 data/drafts/ 原文件；
-    ④ 追加入库台账；
+    ④ 证据卡完整落盘（cards/<id>.json）并追加入库台账（引用卡片路径）；
     ⑤ 跑整库校验兜底——引入新错误则回滚（台账追加 rollback 记录）；
     ⑥ 提示用户 git add + commit（绝不自动提交，提交是人的决定）。
 
@@ -391,18 +424,26 @@ def promote_draft(
     # 消息
     result.messages.append(f"已移动：{draft_path.name} → data/policies/")
 
-    # --- 第④步：追加入库台账 ---
+    # --- 第④步：落盘证据卡并追加入库台账 ---
+    # 先落盘卡片：台账条目要引用卡片路径，顺序不能反
+    card_path = persist_card(logs, policy_id, card, day)
+    # 台账里记相对路径（相对台账目录），避免把绝对路径写进只增不改的日志
+    card_rel = card_path.relative_to(logs).as_posix()
+    # 追加入库条目
     log_path = append_log_entry(logs, _log_entry(
         "promote",                                  # 类型：入库
         policy_id,                                  # 政策 id
         decisions=[d.to_dict() for d in decisions],  # 全部判断
         changes=changes,                            # 字段改动
         evidence_excerpt_count=len(card.pending_checks()),  # 证据摘录条数
+        card_path=card_rel,                         # 完整证据卡位置（复查入口）
     ), day)
-    # 记录台账路径
+    # 记录台账与卡片路径
     result.log_path = log_path
+    # 卡片路径
+    result.card_path = card_path
     # 消息
-    result.messages.append(f"台账已追加：{log_path.name}")
+    result.messages.append(f"台账已追加：{log_path.name}；证据卡已落盘：{card_rel}")
 
     # --- 第⑤步：整库校验兜底 ---
     try:
@@ -428,6 +469,8 @@ def promote_draft(
         result.rolled_back = True
         # 消息
         result.messages.append("入库后校验失败，已整体回滚：")
+        # 说明卡片去向（卡片不随回滚删除：失败的入库尝试本身也是审计事实）
+        result.messages.append(f"证据卡保留备查：{card_rel}")
         # 逐条附错误
         result.messages.extend(f"  - {e}" for e in new_errors)
         # 返回
@@ -452,5 +495,6 @@ __all__ = [
     "append_log_entry",         # 台账追加
     "blocked_reasons",          # 决策状态机
     "log_decision",             # 判断留痕
+    "persist_card",             # 证据卡落盘
     "promote_draft",            # 入库动作
 ]
