@@ -54,6 +54,8 @@ from finreg_ai.pipeline import run_pipeline, validate_repository
 from finreg_ai.site import build_site
 # 导入数据加载函数
 from finreg_ai.store import load_all_policies, load_sources
+# 导入核验取证层：草稿加载、出证、终端渲染
+from finreg_ai.verify import build_all_cards, load_drafts, render_card_lines
 
 # 退出码约定：0 成功，1 发现问题（校验失败），2 用法错误（argparse 默认）
 EXIT_OK = 0       # 一切正常
@@ -286,6 +288,42 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,                   # 默认 None 表示「取北京时间今天」
         metavar="YYYY-MM-DD",           # 占位符，明确告知格式
         help="以指定日期为基准计算未核验天数，默认取北京时间的今天",  # 说明
+    )
+
+    # ------------------------------------------------------------
+    # verify：本地核验 —— 对 data/drafts/ 的草稿出证据卡
+    # ------------------------------------------------------------
+    verify_parser = subparsers.add_parser(
+        "verify",
+        help="对 data/drafts/ 中的草稿做机器取证，产出核验证据卡",
+    )
+    # 指定单条草稿 id；不指定时需配合 --all
+    verify_parser.add_argument(
+        "policy_id",                    # 参数名
+        nargs="?",                      # 可选位置参数（--all 时省略）
+        default=None,                   # 默认不指定
+        metavar="POLICY_ID",            # 占位符
+        help="要取证的草稿 id，如 npc-2021-pipl；与 --all 二选一",  # 说明
+    )
+    # 对全部草稿出证
+    verify_parser.add_argument(
+        "--all",                        # 参数名
+        action="store_true",            # 布尔开关
+        help="对 data/drafts/ 中全部草稿出证",  # 说明
+    )
+    # 输出 JSON 以便程序消费（核验台界面也复用同一结构）
+    verify_parser.add_argument(
+        "--json",                       # 参数名
+        action="store_true",            # 布尔开关
+        help="以 JSON 格式输出证据卡",     # 说明
+    )
+    # 把证据卡写成 JSON 文件（可选；默认只打印不落盘）
+    verify_parser.add_argument(
+        "--output-dir",                 # 参数名
+        type=Path,                      # 转成 Path
+        default=None,                   # 默认不落盘
+        metavar="DIR",                  # 占位符
+        help="把证据卡 JSON 写入指定目录（每张卡一个文件）",  # 说明
     )
 
     # ------------------------------------------------------------
@@ -853,6 +891,94 @@ def cmd_stale(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_verify(args: argparse.Namespace) -> int:
+    """执行 verify 子命令：对草稿做机器取证并输出证据卡。
+
+    退出码语义与 fetch 一致：取证过程本身的失败（草稿目录缺失、
+    指定的 id 不存在）返回非零；而证据卡里的红/黄项**不**影响退出码——
+    它们是给人判断的输入，不是程序失败。把「有待判断项」做成非零退出码，
+    会让 CI 式的自动化误用这条命令当闸门，而它根本不是闸门。
+    """
+    # 加载全部草稿
+    drafts, draft_errors = load_drafts()
+    # 草稿目录级错误（目录缺失、文件损坏）必须明确报出并失败
+    if draft_errors:
+        # 逐条输出
+        for err in draft_errors:
+            # 打印到 stderr，避免污染 JSON 输出
+            print(f"草稿加载问题：{err}", file=sys.stderr)
+        # 目录不存在或文件无法解析属于取证失败
+        if not drafts:
+            # 返回失败码
+            return EXIT_ISSUES
+
+    # 确定本次要出证的草稿集合
+    if args.all:
+        # 全部草稿
+        selected = drafts
+    elif args.policy_id:
+        # 指定单条；不存在时明确报错（静默对空集出证等于假装核过了）
+        if args.policy_id not in drafts:
+            # 打印错误
+            print(f"未找到草稿：{args.policy_id}", file=sys.stderr)
+            # 提示可用 id
+            print(f"当前共有 {len(drafts)} 条草稿，可用 --all 全量出证", file=sys.stderr)
+            # 返回失败码
+            return EXIT_ISSUES
+        # 只取指定的一条
+        selected = {args.policy_id: drafts[args.policy_id]}
+    else:
+        # 既没给 id 也没给 --all：用法错误
+        print("请指定草稿 id 或使用 --all", file=sys.stderr)
+        # 返回用法错误码（与 argparse 一致）
+        return 2
+
+    # 逐条出证
+    cards = build_all_cards(selected)
+
+    # 需要落盘时逐张写 JSON 文件
+    if args.output_dir is not None:
+        # 确保目录存在
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        # 逐张写入
+        for pid, card in cards.items():
+            # 计算路径
+            path = args.output_dir / f"{pid}.json"
+            # 写文件
+            with open(path, "w", encoding="utf-8", newline="\n") as fh:
+                # 序列化（保留中文）
+                json.dump(card.to_dict(), fh, ensure_ascii=False, indent=2)
+
+    # JSON 输出模式
+    if args.json:
+        # 单条时输出对象，多条时输出映射，便于两种用法都直接消费
+        if args.policy_id and not args.all:
+            # 单条：直接输出该卡
+            print(json.dumps(cards[args.policy_id].to_dict(), ensure_ascii=False, indent=2))
+        else:
+            # 多条：输出 id 到卡的映射
+            print(json.dumps({pid: card.to_dict() for pid, card in cards.items()}, ensure_ascii=False, indent=2))
+    else:
+        # 人类可读输出：逐张渲染
+        for index, (_pid, card) in enumerate(cards.items()):
+            # 多张之间空行分隔
+            if index:
+                # 分隔
+                print()
+            # 渲染并逐行输出
+            for line in render_card_lines(card):
+                # 输出
+                print(line)
+        # 落盘提示（落了才说，没说就是没落——可见性原则）
+        if args.output_dir is not None:
+            # 打印落盘位置
+            print()
+            print(f"证据卡已写入：{args.output_dir}（{len(cards)} 张）")
+
+    # 成功返回（红/黄项不影响退出码，理由见函数文档）
+    return EXIT_OK
+
+
 def cmd_build_site(args: argparse.Namespace) -> int:
     """执行 build-site 子命令：把 data/ 渲染成静态站点。"""
     # 执行构建。时间戳与数据来源都不注入，由生成器自己取——
@@ -933,6 +1059,7 @@ _COMMANDS = {
     "list": cmd_list,                         # 列出
     "show": cmd_show,                         # 查看单条
     "stale": cmd_stale,                       # 陈旧记录
+    "verify": cmd_verify,                     # 草稿核验取证
     "build-site": cmd_build_site,             # 生成静态站点
 }
 

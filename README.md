@@ -228,6 +228,7 @@ finreg build-site
 | `finreg fetch` | 执行抓取流水线，发现新政策并产出变更流。`--dry-run` 只报告不写盘，`--show-dropped` 列出被关键词过滤丢弃的条目，`--force` 允许运行未启用的源（`--source` 指定） |
 | `finreg validate` | 校验全部数据的完整性（CI 门禁） |
 | `finreg validate-sources` | 只校验数据源登记表 `data/sources.yaml` |
+| `finreg verify <id>` / `finreg verify --all` | 对 `data/drafts/` 的草稿做机器取证（可达性 / 标题 / 日期 / 义务四层），产出核验证据卡。`--json` 可机读，`--output-dir DIR` 落盘 |
 | `finreg build-site` | 从 `data/` 生成静态站点（对外只读视图）。`--output DIR` 换输出位置，`--json` 输出构建结果 |
 
 #### `stale --as-of` 为什么存在
@@ -447,7 +448,7 @@ finreg-ai-cn/
 │       └── penalty_table.py         # 行政处罚：列表页取地址 → 详情页表格逐行还原
 ├── tests/
 │   ├── fixtures/            # 合成固定装置（离线测试用）
-│   └── test_*.py            # 320 个测试，全部离线
+│   └── test_*.py            # 351 个测试，全部离线
 ├── docs/                    # ← 站点构建产物，不入库（.gitignore）
 ├── CONTRIBUTING.md          # ← 贡献前请先读这个
 ├── DATA_LICENSE.md          # 数据授权说明
