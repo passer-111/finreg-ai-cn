@@ -28,6 +28,7 @@ from finreg_ai.promote import (
     blocked_reasons,        # 决策状态机
     log_decision,           # 判断留痕
     promote_draft,          # 入库动作
+    reject_draft,           # 退回动作
 )
 # 导入模型类型与序列化函数
 from finreg_ai.models import VerifiedBy, policy_from_dict, policy_to_dict
@@ -449,3 +450,102 @@ def test_log_decision_appends_jsonl(tmp_path) -> None:
     assert "无施行条款" in entry["evidence"]
     # 时间戳带时区
     assert "+08:00" in entry["ts"]
+
+
+# ============================================================
+# 退回草稿（出队但留档）
+# ============================================================
+
+def test_reject_moves_draft_and_logs(tmp_path) -> None:
+    """验证退回：草稿移入 _rejected/、理由入台账、原位置不再存在。"""
+    # 目录布局
+    drafts = tmp_path / "drafts"
+    # 台账目录
+    logs = tmp_path / "logs"
+    # 写草稿
+    policy = make_policy(verified_by=VerifiedBy.AUTOMATED)
+    # 写文件
+    _write_draft(drafts, policy)
+    # 记下原文（移动必须逐字节保留）
+    original_text = (drafts / f"{policy.id}.yaml").read_text(encoding="utf-8")
+    # 退回
+    result = reject_draft(
+        policy.id, "原文已废止，官网跳转到期满失效公告",
+        drafts_dir=drafts, log_dir=logs, today=FIXED_DAY,
+    )
+    # 成功
+    assert result.ok
+    # 原位置不再存在
+    assert not (drafts / f"{policy.id}.yaml").exists()
+    # 已移入 _rejected/ 且逐字节一致
+    target = drafts / "_rejected" / f"{policy.id}.yaml"
+    # 存在
+    assert target.exists()
+    # 逐字节
+    assert target.read_text(encoding="utf-8") == original_text
+    # 台账记 kind=reject 且带理由（理由是审计核心字段）
+    log_lines = (logs / f"{FIXED_DAY.isoformat()}.jsonl").read_text(encoding="utf-8").splitlines()
+    # 取记录
+    entry = json.loads(log_lines[0])
+    # 类型
+    assert entry["kind"] == "reject"
+    # 理由
+    assert "废止" in entry["reason"]
+
+
+def test_reject_requires_reason(tmp_path) -> None:
+    """验证理由必填：空理由拒绝退回，草稿与台账都不动。"""
+    # 目录布局
+    drafts = tmp_path / "drafts"
+    # 台账目录
+    logs = tmp_path / "logs"
+    # 写草稿
+    policy = make_policy(verified_by=VerifiedBy.AUTOMATED)
+    # 写文件
+    _write_draft(drafts, policy)
+    # 空白理由（纯空格也算空——strip 后为空）
+    result = reject_draft(policy.id, "   ", drafts_dir=drafts, log_dir=logs, today=FIXED_DAY)
+    # 被拒绝
+    assert not result.ok
+    # 草稿原样保留
+    assert (drafts / f"{policy.id}.yaml").exists()
+    # 台账未创建
+    assert not logs.exists() or not list(logs.glob("*.jsonl"))
+
+
+def test_reject_refuses_overwrite(tmp_path) -> None:
+    """验证同名已退回过时拒绝覆盖（覆盖会抹掉上一次退回的原文）。"""
+    # 目录布局
+    drafts = tmp_path / "drafts"
+    # 台账目录
+    logs = tmp_path / "logs"
+    # 写草稿
+    policy = make_policy(verified_by=VerifiedBy.AUTOMATED)
+    # 写文件
+    _write_draft(drafts, policy)
+    # 预先制造同名已退回文件
+    rejected_dir = drafts / "_rejected"
+    # 建目录
+    rejected_dir.mkdir(parents=True)
+    # 写同名文件
+    (rejected_dir / f"{policy.id}.yaml").write_text("# 上一次退回的原文\n", encoding="utf-8")
+    # 退回
+    result = reject_draft(policy.id, "重复退回", drafts_dir=drafts, log_dir=logs, today=FIXED_DAY)
+    # 被拒绝
+    assert not result.ok
+    # 原草稿未被移动
+    assert (drafts / f"{policy.id}.yaml").exists()
+    # 旧退回文件未被覆盖
+    assert (rejected_dir / f"{policy.id}.yaml").read_text(encoding="utf-8") == "# 上一次退回的原文\n"
+
+
+def test_reject_missing_draft(tmp_path) -> None:
+    """验证草稿不存在时明确报错（不静默成功）。"""
+    # 退回不存在的草稿
+    result = reject_draft("ghost-2026-x", "不存在的草稿",
+                          drafts_dir=tmp_path / "drafts", log_dir=tmp_path / "logs",
+                          today=FIXED_DAY)
+    # 被拒绝
+    assert not result.ok
+    # 报错信息含「不存在」
+    assert any("不存在" in m for m in result.messages)

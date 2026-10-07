@@ -292,3 +292,67 @@ def test_http_promote_blocked_returns_409(tmp_path) -> None:
         server.shutdown()
         # 释放端口
         server.server_close()
+
+
+def test_state_reject_removes_from_queue(tmp_path) -> None:
+    """验证退回后草稿出队、进 _rejected/、台账记 kind=reject、清单可见 ✗。"""
+    # 构造状态
+    state = _make_state(tmp_path)
+    # 退回
+    result = state.reject("test-2026-demo", "原文已废止")
+    # 成功
+    assert result.ok
+    # 队列已空
+    assert state.drafts == {}
+    # 退回清单可见
+    assert state.rejected == ["test-2026-demo"]
+    # 清单行带 ✗ 标记数据
+    rows = state.list_rows()
+    # 一行
+    assert len(rows) == 1
+    # 是退回行
+    assert rows[0]["rejected"] is True
+    # 文件已移入 _rejected/
+    assert (tmp_path / "drafts" / "_rejected" / "test-2026-demo.yaml").exists()
+    # 台账记 kind=reject
+    log_files = list((tmp_path / "logs").glob("*.jsonl"))
+    # 取记录
+    entry = json.loads(log_files[0].read_text(encoding="utf-8").splitlines()[0])
+    # 类型
+    assert entry["kind"] == "reject"
+
+
+def test_http_reject_flow(tmp_path) -> None:
+    """冒烟：POST 退回（带理由）→ 出队；空理由 → 400 且草稿不动。"""
+    # 标准库的表单编码（理由含中文，必须 urlencode）
+    from urllib.parse import urlencode
+    # 构造状态
+    state = _make_state(tmp_path)
+    # 启动服务
+    server, base = _run_server(state)
+    try:
+        # 空理由：400 且草稿不动
+        try:
+            # 触发
+            urllib.request.urlopen(f"{base}/reject", data=b"id=test-2026-demo&reason=")
+            # 不应到达
+            raise AssertionError("空理由退回未被拒绝")
+        except urllib.error.HTTPError as exc:
+            # 400
+            assert exc.code == 400
+        # 草稿未被移动
+        assert (tmp_path / "drafts" / "test-2026-demo.yaml").exists()
+        # 带理由：303 重定向后 200，草稿出队
+        with urllib.request.urlopen(
+            f"{base}/reject",
+            data=urlencode({"id": "test-2026-demo", "reason": "原文已废止"}).encode("utf-8"),
+        ) as resp:
+            # 最终 200（重定向后的页面）
+            assert resp.status == 200
+        # 草稿已移入 _rejected/
+        assert (tmp_path / "drafts" / "_rejected" / "test-2026-demo.yaml").exists()
+    finally:
+        # 关闭服务
+        server.shutdown()
+        # 释放端口
+        server.server_close()

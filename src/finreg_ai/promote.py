@@ -487,14 +487,106 @@ def promote_draft(
     return result
 
 
+# ============================================================
+# 退回草稿（出队但留档）
+# ============================================================
+
+@dataclass
+class RejectResult:
+    """一次退回的结果。"""
+
+    # 是否成功退回
+    ok: bool
+    # 政策 id
+    policy_id: str
+    # 退回后的文件路径；失败时为 None
+    rejected_path: Path | None = None
+    # 过程消息
+    messages: list[str] = field(default_factory=list)
+    # 台账文件路径
+    log_path: Path | None = None
+
+
+def reject_draft(
+    policy_id: str,
+    reason: str,
+    *,
+    drafts_dir: Path | None = None,
+    log_dir: Path | None = None,
+    today: date | None = None,
+) -> RejectResult:
+    """把一条草稿退回到 ``data/drafts/_rejected/``（出队但留档）。
+
+    为什么需要这条通道：没有它，一条「明显不该收录」的草稿只能永远挂在
+    待核验队列里——入库不对，删文件又抹掉了「曾经抓到过它」的痕迹。
+    退回是第三种终态：移出队列、保留原文、理由进台账。
+
+    与入库不同，退回**不需要**先清零待判断项——它放弃的是整条草稿，
+    单项判断已无意义；但理由必填，没有理由的退回事后无法审计。
+    """
+    # 解析默认值
+    drafts = drafts_dir or DRAFTS_DIR               # 草稿目录
+    logs = log_dir or VERIFICATION_LOG_DIR          # 台账目录
+    day = today or today_china()                    # 退回日期（北京时间）
+    # 结果对象
+    result = RejectResult(ok=False, policy_id=policy_id)
+    # 理由必填且不能是空白
+    if not reason.strip():
+        # 明确报错
+        result.messages.append("退回被拒绝：理由必填（没有理由的退回事后无法审计）")
+        # 返回
+        return result
+    # 草稿文件必须存在
+    draft_path = drafts / f"{policy_id}.yaml"
+    # 存在性检查
+    if not draft_path.exists():
+        # 明确报错
+        result.messages.append(f"草稿文件不存在：{draft_path}")
+        # 返回
+        return result
+    # 退回目录
+    rejected_dir = drafts / "_rejected"
+    # 目标路径
+    target = rejected_dir / f"{policy_id}.yaml"
+    # 防御：同名已退回过则拒绝覆盖（覆盖会抹掉上一次退回的原文）
+    if target.exists():
+        # 明确报错
+        result.messages.append(f"退回目标已存在，拒绝覆盖：{target}")
+        # 返回
+        return result
+    # 确保目录存在
+    rejected_dir.mkdir(parents=True, exist_ok=True)
+    # 移动（rename 在同一卷内是原子的；原文逐字节保留）
+    draft_path.rename(target)
+    # 追加台账（只增不改）
+    log_path = append_log_entry(logs, _log_entry(
+        "reject",                       # 类型：退回
+        policy_id,                      # 政策 id
+        reason=reason.strip(),          # 退回理由（审计核心字段）
+        rejected_to=str(target),        # 留档位置
+    ), day)
+    # 填结果
+    result.ok = True
+    # 路径
+    result.rejected_path = target
+    # 台账路径
+    result.log_path = log_path
+    # 消息
+    result.messages.append(f"已退回：{draft_path.name} → _rejected/；理由已入台账")
+    # 返回
+    return result
+
+
 # 公开接口
 __all__ = [
     "VERIFICATION_LOG_DIR",     # 台账目录
     "Decision",                 # 一次判断
     "PromoteResult",            # 入库结果
+    "RejectResult",             # 退回结果
     "append_log_entry",         # 台账追加
     "blocked_reasons",          # 决策状态机
     "log_decision",             # 判断留痕
     "persist_card",             # 证据卡落盘
     "promote_draft",            # 入库动作
+    "reject_draft",             # 退回动作
 ]

@@ -49,14 +49,16 @@ from finreg_ai.verify import (
     build_evidence_card,     # 单条出证（重新取证用）
     load_drafts,             # 草稿加载
 )
-# 从入库模块复用决策状态机与入库动作
+# 从入库模块复用决策状态机与入库/退回动作
 from finreg_ai.promote import (
     VERIFICATION_LOG_DIR,    # 台账目录
     Decision,                # 一次判断
     PromoteResult,           # 入库结果
+    RejectResult,            # 退回结果
     blocked_reasons,         # 决策状态机（界面置灰与服务端防线共用）
     log_decision,            # 判断留痕
     promote_draft,           # 入库动作
+    reject_draft,            # 退回动作
 )
 
 # 静态资源目录（复用对外站点的样式与图标，不维护第二份 CSS）
@@ -106,6 +108,8 @@ class ConsoleState:
         self.decisions: dict[str, list[Decision]] = {}
         # 本次会话已入库的 id 列表（左侧清单的 ✓）
         self.done: list[str] = []
+        # 本次会话已退回的 id 列表（左侧清单的 ✗，与入库区分展示）
+        self.rejected: list[str] = []
 
     def get_card(self, policy_id: str) -> EvidenceCard | None:
         """取一张证据卡；未构建时现场构建（一次 HTTP 抓取）。"""
@@ -218,6 +222,32 @@ class ConsoleState:
         # 返回结果
         return result
 
+    def reject(self, policy_id: str, reason: str) -> RejectResult:
+        """执行退回。退回不需要清零待判断项（放弃的是整条草稿），但理由必填。"""
+        # 草稿必须在队列里
+        if policy_id not in self.drafts:
+            # 返回失败结果
+            return RejectResult(ok=False, policy_id=policy_id, messages=[f"未找到草稿：{policy_id}"])
+        # 调退回动作（理由校验与移动在其中）
+        result = reject_draft(
+            policy_id,                              # 草稿 id
+            reason,                                 # 退回理由
+            drafts_dir=self.drafts_dir,             # 草稿目录
+            log_dir=self.log_dir,                   # 台账目录
+        )
+        # 成功时更新会话状态
+        if result.ok:
+            # 登记已退回
+            self.rejected.append(policy_id)
+            # 从待核验清单移除
+            self.drafts.pop(policy_id, None)
+            # 清缓存与判断进度（退回后这些进度已无意义，但台账里都有留痕）
+            self.cards.pop(policy_id, None)
+            # 清判断
+            self.decisions.pop(policy_id, None)
+        # 返回结果
+        return result
+
     def list_rows(self) -> list[dict[str, Any]]:
         """左侧清单的行数据：待核验草稿 + 本次已入库记录。"""
         # 行容器
@@ -245,6 +275,17 @@ class ConsoleState:
                 "id": pid,          # id
                 "title": pid,       # 已入库的记录标题不再重要，id 即可
                 "done": True,       # 已入库
+                "rejected": False,  # 非退回
+                "error_count": None, "warning_count": None, "manual_count": None,
+            })
+        # 已退回记录排最后（出队但可见：本次会话的退回也要看得见）
+        for pid in self.rejected:
+            # 组装行
+            rows.append({
+                "id": pid,          # id
+                "title": pid,       # id 即可
+                "done": False,      # 未入库
+                "rejected": True,   # 已退回
                 "error_count": None, "warning_count": None, "manual_count": None,
             })
         # 返回
@@ -397,13 +438,23 @@ def _render_card_panel(state: ConsoleState, policy_id: str) -> str:
         f'<input type="hidden" name="id" value="{_esc(policy_id)}">'
         f'<button type="submit">重新取证</button></form>'
     )
+    # 退回表单：理由必填（没有理由的退回事后无法审计）。
+    # 退回是第三种终态——「入库」与「留在队列」之外，必须给「不该收录」
+    # 一个出队但留档的去处，否则烂草稿会永远挂在队列里逼人做假入库。
+    reject_html = (
+        f'<form method="post" action="/reject" class="opt-form">'
+        f'<input type="hidden" name="id" value="{_esc(policy_id)}">'
+        f'<input type="text" name="reason" placeholder="退回理由（必填，入台账）" '
+        f'size="40" required>'
+        f'<button type="submit">退回草稿</button></form>'
+    )
     # 组装面板
     return (
         f'<div class="card">'
         f"<h2>{_esc(card.title)}</h2>"
         f'<p class="muted">{_esc(card.policy_id)} · 取证于 {_esc(card.generated_at)}</p>'
         f'<p><a href="{_esc(card.url)}">{_esc(card.url)}</a></p>'
-        f"{refetch_html}{green_html}{pending_html}<hr>{promote_html}</div>"
+        f"{refetch_html}{green_html}{pending_html}<hr>{promote_html}{reject_html}</div>"
     )
 
 
@@ -420,7 +471,8 @@ def _render_page(state: ConsoleState, current_id: str | None, notice: str = "") 
     # 逐行渲染
     for row in rows:
         # 已入库标记
-        mark = "✓ " if row["done"] else ("▶ " if row["id"] == current_id else "")
+        mark = ("✓ " if row["done"] else ("✗ " if row.get("rejected")  # 入库/退回标记
+                else ("▶ " if row["id"] == current_id else "")))
         # 计数徽章（未构建证据卡的行不显示计数——清单渲染不该触发全网抓取）
         count_html = ""
         # 有计数时渲染
@@ -687,7 +739,7 @@ def _make_handler(state: ConsoleState) -> type[BaseHTTPRequestHandler]:
             self._send_html("<p>not found</p>", status=404)
 
         def do_POST(self) -> None:  # noqa: N802（标准库要求的命名）
-            """处理 POST：判断、入库、重新取证。"""
+            """处理 POST：判断、入库、重新取证、退回。"""
             # 解析路径
             path = urlparse(self.path).path
             # 读表单
@@ -726,6 +778,23 @@ def _make_handler(state: ConsoleState) -> type[BaseHTTPRequestHandler]:
                     return
                 # 303 回列表
                 self._redirect(f"/?id={form.get('id', '')}&notice=已重新取证")
+                # 返回
+                return
+            # 路由：退回
+            if path == "/reject":
+                # 执行退回（理由为空或草稿不存在时拒绝）。
+                # 变量名不复用上方的 result：两个分支的结果类型不同，
+                # 复用会让 mypy 报类型冲突（也会让人误以为是同一对象）
+                reject_result = state.reject(form.get("id", ""), form.get("reason", ""))
+                # 失败：明确报错（理由缺失是使用者必须修正的问题，不能静默）
+                if not reject_result.ok:
+                    # 渲染拒绝原因
+                    self._send_html(
+                        f"<p>退回被拒绝：{_esc('；'.join(reject_result.messages))}</p>", status=400)
+                    # 返回
+                    return
+                # 303 回列表（退回后该 id 已出队，不再带 id 参数）
+                self._redirect("/?notice=草稿已退回 _rejected/ 并写入台账")
                 # 返回
                 return
             # 其它路径 404
