@@ -1,0 +1,56 @@
+id: pbc-2020-jrt0197
+title: 金融数据安全 数据安全分级指南
+title_en: null
+issuer: 中国人民银行
+issuer_code: pbc
+doc_number: JR/T 0197—2020
+jurisdiction: CN
+jurisdiction_detail: null
+instrument_type: 其他
+bindingness: soft-law
+ai_relevance: related
+domain:
+- 金融
+- 数据
+topics:
+- data-security
+- ai-governance
+- data-quality
+status: effective
+published_on: '2020-09-23'
+effective_from: '2020-09-23'
+effective_until: null
+supersedes: []
+superseded_by: null
+amends: []
+amended_by: []
+versions:
+- version: 1
+  published_on: '2020-09-23'
+  effective_from: '2020-09-23'
+  effective_until: null
+  status: effective
+  url: https://cfstc.pbc.gov.cn/bzgk/detail/?id=0&bzId=1873
+  archived_url: null
+  content_hash: null
+  change_note: null
+source:
+  url: https://cfstc.pbc.gov.cn/bzgk/detail/?id=0&bzId=1873
+  site: cfstc.pbc.gov.cn
+  tier: primary
+  fetched_at: '2026-10-07T03:45:00+08:00'
+  http_status: 200
+  content_hash: null
+  snapshot_path: null
+last_verified: '2026-10-08'
+verified_by: automated
+verified_note: 2026-10-08 机器取证含 2 项非绿（未经人工处理），自动入库（verified_by 保持 automated，未经人工核验；需要人工级置信时请对该记录单独走 finreg verify 核验流程）。机器证据：[标题比对/manual]
+  页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），无法比对标题 —— 无法自动取证，需人工核；[日期与状态/manual] 页面正文无法取得（可能为 JS 渲染）—— 无法自动取证，需人工核
+applicable_to:
+- 金融业机构
+key_obligations: []
+language: zh-CN
+tags:
+- 金融行业标准
+- 数据分级
+notes: 层级归类说明同 JR/T 0171：金融行业标准暂归「其他」。与 AI 合规的连接点：本标准给出金融数据安全分级（1 至 5 级）的判定规则，是金融机构判断「某类数据能否进入模型训练语料」的量化依据——分级越高，进入训练流程所需的安全措施越严格。

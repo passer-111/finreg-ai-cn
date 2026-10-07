@@ -1,0 +1,57 @@
+id: nfra-2024-data-security
+title: 银行保险机构数据安全管理办法
+title_en: null
+issuer: 国家金融监督管理总局
+issuer_code: nfra
+doc_number: 金规〔2024〕24号
+jurisdiction: CN
+jurisdiction_detail: null
+instrument_type: 部门规范性文件
+bindingness: binding
+ai_relevance: related
+domain:
+- 银行
+- 保险
+- 数据
+topics:
+- data-security
+- personal-information
+- ai-governance
+status: effective
+published_on: '2024-12-27'
+effective_from: '2024-12-27'
+effective_until: null
+supersedes: []
+superseded_by: null
+amends: []
+amended_by: []
+versions:
+- version: 1
+  published_on: '2024-12-27'
+  effective_from: '2024-12-27'
+  effective_until: null
+  status: effective
+  url: https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1192308&itemId=926
+  archived_url: null
+  content_hash: null
+  change_note: null
+source:
+  url: https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=1192308&itemId=926
+  site: nfra.gov.cn
+  tier: primary
+  fetched_at: '2026-10-07T03:30:00+08:00'
+  http_status: 200
+  content_hash: null
+  snapshot_path: null
+last_verified: '2026-10-08'
+verified_by: automated
+verified_note: 2026-10-08 机器取证含 2 项非绿（未经人工处理），自动入库（verified_by 保持 automated，未经人工核验；需要人工级置信时请对该记录单独走 finreg verify 核验流程）。机器证据：[标题比对/manual]
+  页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），无法比对标题 —— 无法自动取证，需人工核；[日期与状态/manual] 页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），无法确认日期表述 —— 无法自动取证，需人工核
+applicable_to:
+- 银行保险机构
+key_obligations: []
+language: zh-CN
+tags:
+- 数据安全
+- 金规文号
+notes: 页面为 SPA 结构，直接访问返回脚本提示，文本在 PDF 附件中。与 AI 合规的连接点：银行保险机构将客户数据用于模型训练属于数据处理活动，受本办法数据分类分级与外包数据管理约束。

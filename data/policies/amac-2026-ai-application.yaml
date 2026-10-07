@@ -1,0 +1,59 @@
+id: amac-2026-ai-application
+title: 基金经营机构大模型技术应用规范
+title_en: null
+issuer: 中国证券投资基金业协会
+issuer_code: amac
+doc_number: T/AMAC 0004—2026
+jurisdiction: CN
+jurisdiction_detail: null
+instrument_type: 行业自律规则
+bindingness: soft-law
+ai_relevance: core
+domain:
+- 基金
+- 人工智能
+topics:
+- ai-governance
+- model-risk
+- ethics-review
+status: effective
+published_on: '2026-04-03'
+effective_from: '2026-04-03'
+effective_until: null
+supersedes: []
+superseded_by: null
+amends: []
+amended_by: []
+versions:
+- version: 1
+  published_on: '2026-04-03'
+  effective_from: '2026-04-03'
+  effective_until: null
+  status: effective
+  url: https://fg.amac.org.cn/governmentrules_3854/hybz/tb/202606/t20260616_27834.html
+  archived_url: null
+  content_hash: null
+  change_note: null
+source:
+  url: https://fg.amac.org.cn/governmentrules_3854/hybz/tb/202606/t20260616_27834.html
+  site: fg.amac.org.cn
+  tier: primary
+  fetched_at: '2026-10-07T03:45:00+08:00'
+  http_status: 200
+  content_hash: null
+  snapshot_path: null
+last_verified: '2026-10-08'
+verified_by: automated
+verified_note: '2026-10-08 机器取证含 3 项非绿（未经人工处理），自动入库（verified_by 保持 automated，未经人工核验；需要人工级置信时请对该记录单独走 finreg verify 核验流程）。机器证据：[可达性/error]
+  官方页面无法访问：SSLError: HTTPSConnectionPool(host=''fg.amac.org.cn'', port=443): Max retries exceeded with url: /governmentrules_3854/hybz/tb/202606/t20260616_27834.html
+  (Caused by SSLError(SSLCertVerificationError(1, ''[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to
+  get local issuer certificate (_ssl.c:1032)'')))；[标题比对/manual] 页面未提供可比对的 <title> —— 无法自动取证，需人工核；[日期与状态/manual] 页面正文无法取得（可能为
+  JS 渲染）—— 无法自动取证，需人工核'
+applicable_to:
+- 基金经营机构
+key_obligations: []
+language: zh-CN
+tags:
+- 团体标准
+- 大模型
+notes: 基金行业首个大模型应用专项团体标准。与《证券期货业网络和信息安全管理办法》的关系：本办法管信息系统安全底线，本标准管大模型应用本身的治理要求，两者在基金机构部署 AI 时叠加适用。

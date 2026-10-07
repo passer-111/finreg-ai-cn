@@ -1,0 +1,56 @@
+id: pbc-2020-jrt0171
+title: 个人金融信息保护技术规范
+title_en: null
+issuer: 中国人民银行
+issuer_code: pbc
+doc_number: JR/T 0171—2020
+jurisdiction: CN
+jurisdiction_detail: null
+instrument_type: 其他
+bindingness: soft-law
+ai_relevance: related
+domain:
+- 金融
+- 数据
+topics:
+- personal-information
+- data-security
+- ai-governance
+status: effective
+published_on: '2020-02-13'
+effective_from: '2020-02-13'
+effective_until: null
+supersedes: []
+superseded_by: null
+amends: []
+amended_by: []
+versions:
+- version: 1
+  published_on: '2020-02-13'
+  effective_from: '2020-02-13'
+  effective_until: null
+  status: effective
+  url: https://cfstc.pbc.gov.cn/bzgk/detail/?bzId=1856&id=0
+  archived_url: null
+  content_hash: null
+  change_note: null
+source:
+  url: https://cfstc.pbc.gov.cn/bzgk/detail/?bzId=1856&id=0
+  site: cfstc.pbc.gov.cn
+  tier: primary
+  fetched_at: '2026-10-07T03:45:00+08:00'
+  http_status: 200
+  content_hash: null
+  snapshot_path: null
+last_verified: '2026-10-08'
+verified_by: automated
+verified_note: 2026-10-08 机器取证含 2 项非绿（未经人工处理），自动入库（verified_by 保持 automated，未经人工核验；需要人工级置信时请对该记录单独走 finreg verify 核验流程）。机器证据：[标题比对/manual]
+  页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），无法比对标题 —— 无法自动取证，需人工核；[日期与状态/manual] 页面正文无法取得（可能为 JS 渲染）—— 无法自动取证，需人工核
+applicable_to:
+- 金融业机构
+key_obligations: []
+language: zh-CN
+tags:
+- 金融行业标准
+- 个人金融信息
+notes: 关于层级归类的说明：JR/T 为金融行业标准，由人民银行发布，既非「国家标准」也非协会「行业自律规则」，schema 无完全对应项，暂归「其他」；若后续 schema 增设「行业标准」取值，应迁移。与 AI 合规的连接点：该规范将个人金融信息按敏感程度分级（C1/C2/C3），金融机构把客户信息用于模型训练或自动化画像时，其分级结果直接决定可使用的处理方式。

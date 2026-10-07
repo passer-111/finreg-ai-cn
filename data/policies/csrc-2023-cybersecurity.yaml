@@ -1,0 +1,59 @@
+id: csrc-2023-cybersecurity
+title: 证券期货业网络和信息安全管理办法
+title_en: null
+issuer: 中国证券监督管理委员会
+issuer_code: csrc
+doc_number: 中国证券监督管理委员会令（第218号）
+jurisdiction: CN
+jurisdiction_detail: null
+instrument_type: 部门规章
+bindingness: binding
+ai_relevance: related
+domain:
+- 证券
+- 基金
+- 网络安全
+topics:
+- cybersecurity
+- business-continuity
+- data-security
+- supervision-and-reporting
+status: effective
+published_on: '2023-02-27'
+effective_from: '2023-05-01'
+effective_until: null
+supersedes: []
+superseded_by: null
+amends: []
+amended_by: []
+versions:
+- version: 1
+  published_on: '2023-02-27'
+  effective_from: '2023-05-01'
+  effective_until: null
+  status: effective
+  url: https://www.csrc.gov.cn/csrc/c101953/c7202800/content.shtml
+  archived_url: null
+  content_hash: null
+  change_note: null
+source:
+  url: https://www.csrc.gov.cn/csrc/c101953/c7202800/content.shtml
+  site: csrc.gov.cn
+  tier: primary
+  fetched_at: '2026-10-07T03:45:00+08:00'
+  http_status: 200
+  content_hash: null
+  snapshot_path: null
+last_verified: '2026-10-08'
+verified_by: automated
+verified_note: 2026-10-08 机器四层取证全绿，自动入库（verified_by 保持 automated，未经人工核验；需要人工级置信时请对该记录单独走 finreg verify 核验流程）。机器证据：[可达性] 页面可访问（HTTP
+  200，未发生异常重定向）；[标题比对] 页面标题经归一化后与记录一致（互相包含）；[日期与状态] 生效日期 2023-05-01 在原文「自 X 年 X 月 X 日起施行」句式中得到佐证；[义务核对] 记录暂无关键义务条目（草稿阶段待人工提炼）
+applicable_to:
+- 证券期货经营机构
+- 为证券期货业务活动提供信息技术服务的机构
+key_obligations: []
+language: zh-CN
+tags:
+- 证监会令
+- 网络和信息安全
+notes: 共六十二条。与 AI 合规的连接点：证券期货机构上线智能投顾、量化交易系统等 AI 应用时，其信息系统须满足本办法的安全等级保护、应急演练与报告要求；办法对信息技术服务机构的管理义务，也约束金融机构采购第三方 AI 服务的行为。

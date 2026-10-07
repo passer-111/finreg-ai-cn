@@ -1,0 +1,64 @@
+{
+  "policy_id": "csrc-2023-cybersecurity",
+  "title": "证券期货业网络和信息安全管理办法",
+  "url": "https://www.csrc.gov.cn/csrc/c101953/c7202800/content.shtml",
+  "generated_at": "2026-10-08T07:45:33+08:00",
+  "pending_count": 0,
+  "counts": {
+    "ok": 4
+  },
+  "checks": [
+    {
+      "check_id": "reachability",
+      "layer": "可达性",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "页面可访问（HTTP 200，未发生异常重定向）",
+      "evidence": [
+        "最终 URL：https://www.csrc.gov.cn/csrc/c101953/c7202800/content.shtml"
+      ],
+      "options": []
+    },
+    {
+      "check_id": "title",
+      "layer": "标题比对",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "页面标题经归一化后与记录一致（互相包含）",
+      "evidence": [
+        "页面 <title>：【第218号令】《证券期货业网络和信息安全管理办法》_中国证券监督管理委员会"
+      ],
+      "options": []
+    },
+    {
+      "check_id": "date",
+      "layer": "日期与状态",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "生效日期 2023-05-01 在原文「自 X 年 X 月 X 日起施行」句式中得到佐证",
+      "evidence": [
+        "2023年1月17日中国证券监督管理委员会2023年第1次委务会议审议通过,现予公布,自2023年5月1日起施行"
+      ],
+      "options": []
+    },
+    {
+      "check_id": "obligations",
+      "layer": "义务核对",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "记录暂无关键义务条目（草稿阶段待人工提炼）",
+      "evidence": [],
+      "options": []
+    }
+  ],
+  "attachments": [
+    {
+      "url": "https://www.csrc.gov.cn/csrc/c101953/c7202800/7202800/files/附件1：证券期货业网络和信息安全管理办法.pdf",
+      "kind": "pdf",
+      "status": "extracted",
+      "text_len": 11435,
+      "error": null
+    }
+  ],
+  "promoted_on": "2026-10-08"
+}

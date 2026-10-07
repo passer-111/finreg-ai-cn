@@ -1,0 +1,57 @@
+{
+  "policy_id": "npc-2021-pipl",
+  "title": "中华人民共和国个人信息保护法",
+  "url": "http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html",
+  "generated_at": "2026-10-08T07:45:38+08:00",
+  "pending_count": 0,
+  "counts": {
+    "ok": 4
+  },
+  "checks": [
+    {
+      "check_id": "reachability",
+      "layer": "可达性",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "页面可访问（HTTP 200，未发生异常重定向）",
+      "evidence": [
+        "最终 URL：http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html"
+      ],
+      "options": []
+    },
+    {
+      "check_id": "title",
+      "layer": "标题比对",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "页面标题经归一化后与记录一致（互相包含）",
+      "evidence": [
+        "页面 <title>：中华人民共和国个人信息保护法_中国人大网"
+      ],
+      "options": []
+    },
+    {
+      "check_id": "date",
+      "layer": "日期与状态",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "生效日期 2021-11-01 在原文「自 X 年 X 月 X 日起施行」句式中得到佐证",
+      "evidence": [
+        "委托合同不生效、无效、被撤销或者终止的，受托人应当将个人信息返还个人信息处理者或者予以删除，不得保留",
+        "本法自2021年11月1日起施行"
+      ],
+      "options": []
+    },
+    {
+      "check_id": "obligations",
+      "layer": "义务核对",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "记录暂无关键义务条目（草稿阶段待人工提炼）",
+      "evidence": [],
+      "options": []
+    }
+  ],
+  "attachments": [],
+  "promoted_on": "2026-10-08"
+}

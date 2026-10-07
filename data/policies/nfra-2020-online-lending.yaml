@@ -1,0 +1,57 @@
+id: nfra-2020-online-lending
+title: 商业银行互联网贷款管理暂行办法
+title_en: null
+issuer: 中国银行保险监督管理委员会
+issuer_code: nfra
+doc_number: 中国银行保险监督管理委员会令2020年第9号
+jurisdiction: CN
+jurisdiction_detail: null
+instrument_type: 部门规章
+bindingness: binding
+ai_relevance: related
+domain:
+- 银行
+- 金融科技
+topics:
+- model-risk
+- data-security
+- outsourcing
+- consumer-protection
+status: effective
+published_on: '2020-07-12'
+effective_from: '2020-07-12'
+effective_until: null
+supersedes: []
+superseded_by: null
+amends: []
+amended_by: []
+versions:
+- version: 1
+  published_on: '2020-07-12'
+  effective_from: '2020-07-12'
+  effective_until: null
+  status: effective
+  url: https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=925928&itemId=4113
+  archived_url: null
+  content_hash: null
+  change_note: null
+source:
+  url: https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=925928&itemId=4113
+  site: nfra.gov.cn
+  tier: primary
+  fetched_at: '2026-10-07T03:30:00+08:00'
+  http_status: 200
+  content_hash: null
+  snapshot_path: null
+last_verified: '2026-10-08'
+verified_by: automated
+verified_note: 2026-10-08 机器取证含 2 项非绿（未经人工处理），自动入库（verified_by 保持 automated，未经人工核验；需要人工级置信时请对该记录单独走 finreg verify 核验流程）。机器证据：[标题比对/manual]
+  页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），无法比对标题 —— 无法自动取证，需人工核；[日期与状态/manual] 页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），无法确认日期表述 —— 无法自动取证，需人工核
+applicable_to:
+- 商业银行
+key_obligations: []
+language: zh-CN
+tags:
+- 互联网贷款
+- 银保监会令
+notes: 共七十条。与 AI 合规的连接点：办法要求互联网贷款的风险模型（授信审批、反欺诈、风险定价）纳入全面风险管理体系，并对合作机构实施名单制管理——金融机构用第三方模型做线上放贷时，本办法是判断「模型外包是否越界」的直接依据。

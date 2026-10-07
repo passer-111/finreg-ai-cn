@@ -1,0 +1,67 @@
+{
+  "policy_id": "amac-2026-ai-application",
+  "title": "基金经营机构大模型技术应用规范",
+  "url": "https://fg.amac.org.cn/governmentrules_3854/hybz/tb/202606/t20260616_27834.html",
+  "generated_at": "2026-10-08T07:45:30+08:00",
+  "pending_count": 3,
+  "counts": {
+    "error": 1,
+    "manual": 2,
+    "ok": 1
+  },
+  "checks": [
+    {
+      "check_id": "reachability",
+      "layer": "可达性",
+      "status": "error",
+      "status_label": "证据冲突",
+      "summary": "官方页面无法访问：SSLError: HTTPSConnectionPool(host='fg.amac.org.cn', port=443): Max retries exceeded with url: /governmentrules_3854/hybz/tb/202606/t20260616_27834.html (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1032)')))",
+      "evidence": [],
+      "options": [
+        {
+          "key": "confirm-accessible",
+          "label": "我已人工打开页面，确认可以访问"
+        }
+      ]
+    },
+    {
+      "check_id": "title",
+      "layer": "标题比对",
+      "status": "manual",
+      "status_label": "需人工核",
+      "summary": "页面未提供可比对的 <title> —— 无法自动取证，需人工核",
+      "evidence": [],
+      "options": [
+        {
+          "key": "confirm-title",
+          "label": "我已人工核对，页面标题与记录一致"
+        }
+      ]
+    },
+    {
+      "check_id": "date",
+      "layer": "日期与状态",
+      "status": "manual",
+      "status_label": "需人工核",
+      "summary": "页面正文无法取得（可能为 JS 渲染）—— 无法自动取证，需人工核",
+      "evidence": [],
+      "options": [
+        {
+          "key": "confirm-date",
+          "label": "我已人工核对原文的施行/废止条款"
+        }
+      ]
+    },
+    {
+      "check_id": "obligations",
+      "layer": "义务核对",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "记录暂无关键义务条目（草稿阶段待人工提炼）",
+      "evidence": [],
+      "options": []
+    }
+  ],
+  "attachments": [],
+  "promoted_on": "2026-10-08"
+}

@@ -1,0 +1,58 @@
+id: shnfra-2026-ai-measures
+title: 推动上海银行业保险业人工智能应用的若干措施
+title_en: null
+issuer: 国家金融监督管理总局上海监管局
+issuer_code: shnfra
+doc_number: 沪金发〔2026〕19号
+jurisdiction: CN
+jurisdiction_detail: 上海市
+instrument_type: 地方性文件
+bindingness: soft-law
+ai_relevance: core
+domain:
+- 银行
+- 保险
+- 人工智能
+topics:
+- ai-governance
+- talent-and-culture
+- computing-power
+- ethics-review
+status: effective
+published_on: '2026-09-18'
+effective_from: null
+effective_until: null
+supersedes: []
+superseded_by: null
+amends: []
+amended_by: []
+versions:
+- version: 1
+  published_on: '2026-09-18'
+  effective_from: null
+  effective_until: null
+  status: effective
+  url: https://www.nfra.gov.cn/branch/shanghai/view/pages/common/ItemDetail.html?docId=1273268&itemId=998
+  archived_url: null
+  content_hash: null
+  change_note: null
+source:
+  url: https://www.nfra.gov.cn/branch/shanghai/view/pages/common/ItemDetail.html?docId=1273268&itemId=998
+  site: nfra.gov.cn
+  tier: primary
+  fetched_at: '2026-10-07T03:45:00+08:00'
+  http_status: 200
+  content_hash: null
+  snapshot_path: null
+last_verified: '2026-10-08'
+verified_by: automated
+verified_note: 2026-10-08 机器取证含 2 项非绿（未经人工处理），自动入库（verified_by 保持 automated，未经人工核验；需要人工级置信时请对该记录单独走 finreg verify 核验流程）。机器证据：[标题比对/manual]
+  页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），无法比对标题 —— 无法自动取证，需人工核；[日期与状态/manual] 页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），无法确认是否存在施行条款 —— 无法自动取证，需人工核
+applicable_to:
+- 辖内各银行保险机构
+key_obligations: []
+language: zh-CN
+tags:
+- 地方监管文件
+- AI应用
+notes: 围绕生态构建、人才储备、科技伦理治理、长三角算力基础设施协同、沙盒试点、大模型垂直应用等方向提出措施。与本库其他记录的关系：它是金融 AI 监管在中央规章之下的地方落点样本，上海辖内机构部署 AI 应用时须与国家层面的 AI 指导意见叠加适用。

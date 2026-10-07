@@ -1,0 +1,72 @@
+{
+  "policy_id": "cba-2022-model-risk-framework",
+  "title": "人工智能模型风险管理框架",
+  "url": "https://china-cba.net/Index/showw/catid/251/id/41445",
+  "generated_at": "2026-10-08T07:45:32+08:00",
+  "pending_count": 1,
+  "counts": {
+    "ok": 3,
+    "error": 1
+  },
+  "checks": [
+    {
+      "check_id": "reachability",
+      "layer": "可达性",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "页面可访问（HTTP 200，未发生异常重定向）",
+      "evidence": [
+        "最终 URL：https://china-cba.net/Index/showw/catid/251/id/41445"
+      ],
+      "options": []
+    },
+    {
+      "check_id": "title",
+      "layer": "标题比对",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "页面标题经归一化后与记录一致（互相包含）",
+      "evidence": [
+        "页面 <title>：TR/CBA 106—2022《人工智能模型风险管理框架》 - 中国银行业协会"
+      ],
+      "options": []
+    },
+    {
+      "check_id": "date",
+      "layer": "日期与状态",
+      "status": "error",
+      "status_label": "证据冲突",
+      "summary": "记录填写了生效日期 2022-10-24，但官方页面全文检索不到任何施行/生效/废止表述 —— 疑似编造日期",
+      "evidence": [],
+      "options": [
+        {
+          "key": "clear-date",
+          "label": "清空 effective_from（在核验说明中写明原因）"
+        },
+        {
+          "key": "keep-date",
+          "label": "保留日期（我已人工核对原文确有依据）"
+        }
+      ]
+    },
+    {
+      "check_id": "obligations",
+      "layer": "义务核对",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "记录暂无关键义务条目（草稿阶段待人工提炼）",
+      "evidence": [],
+      "options": []
+    }
+  ],
+  "attachments": [
+    {
+      "url": "https://china-cba.net/Uploads/ueditor/file/20221027/635a26ff58a83.pdf",
+      "kind": "pdf",
+      "status": "extracted",
+      "text_len": 302,
+      "error": null
+    }
+  ],
+  "promoted_on": "2026-10-08"
+}

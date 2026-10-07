@@ -1,0 +1,66 @@
+{
+  "policy_id": "nfra-2020-online-lending",
+  "title": "商业银行互联网贷款管理暂行办法",
+  "url": "https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=925928&itemId=4113",
+  "generated_at": "2026-10-08T07:45:34+08:00",
+  "pending_count": 2,
+  "counts": {
+    "ok": 2,
+    "manual": 2
+  },
+  "checks": [
+    {
+      "check_id": "reachability",
+      "layer": "可达性",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "页面可访问（HTTP 200，未发生异常重定向）",
+      "evidence": [
+        "最终 URL：https://www.nfra.gov.cn/cn/view/pages/ItemDetail.html?docId=925928&itemId=4113"
+      ],
+      "options": []
+    },
+    {
+      "check_id": "title",
+      "layer": "标题比对",
+      "status": "manual",
+      "status_label": "需人工核",
+      "summary": "页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），无法比对标题 —— 无法自动取证，需人工核",
+      "evidence": [
+        "记录标题：商业银行互联网贷款管理暂行办法",
+        "页面 <title>：国家金融监督管理总局"
+      ],
+      "options": [
+        {
+          "key": "confirm-title",
+          "label": "我已人工核对，页面正文确为该文件"
+        }
+      ]
+    },
+    {
+      "check_id": "date",
+      "layer": "日期与状态",
+      "status": "manual",
+      "status_label": "需人工核",
+      "summary": "页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），无法确认日期表述 —— 无法自动取证，需人工核",
+      "evidence": [],
+      "options": [
+        {
+          "key": "confirm-date",
+          "label": "我已人工核对原文的施行/废止条款"
+        }
+      ]
+    },
+    {
+      "check_id": "obligations",
+      "layer": "义务核对",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "记录暂无关键义务条目（草稿阶段待人工提炼）",
+      "evidence": [],
+      "options": []
+    }
+  ],
+  "attachments": [],
+  "promoted_on": "2026-10-08"
+}

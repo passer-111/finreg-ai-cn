@@ -1,0 +1,66 @@
+id: npc-2017-csl
+title: 中华人民共和国网络安全法
+title_en: null
+issuer: 全国人民代表大会常务委员会
+issuer_code: npc
+doc_number: 中华人民共和国主席令第五十三号
+jurisdiction: CN
+jurisdiction_detail: null
+instrument_type: 法律
+bindingness: binding
+ai_relevance: background
+domain:
+- 网络安全
+- 数据
+topics:
+- cybersecurity
+- data-security
+- personal-information
+status: effective
+published_on: '2016-11-07'
+effective_from: '2026-01-01'
+effective_until: null
+supersedes: []
+superseded_by: null
+amends: []
+amended_by: []
+versions:
+- version: 1
+  published_on: '2016-11-07'
+  effective_from: '2017-06-01'
+  effective_until: '2025-12-31'
+  status: amended
+  url: http://www.npc.gov.cn/c2/c30834/201905/t20190521_274248.html
+  archived_url: null
+  content_hash: null
+  change_note: 首版。2025-10-28 全国人大常委会修正后重新公布，自 2026-01-01 起施行新文本
+- version: 2
+  published_on: '2025-10-28'
+  effective_from: '2026-01-01'
+  effective_until: null
+  status: effective
+  url: https://flk.npc.gov.cn/detail?fileId=&id=021e7d7684474107b8f3febbb1c4f8b5&title=中华人民共和国网络安全法
+  archived_url: null
+  content_hash: null
+  change_note: 2025 年修正版重新公布，新增 AI 相关条款（据全国人大常委会办公厅新闻发布会），修正详情待人工逐条比对
+source:
+  url: https://flk.npc.gov.cn/detail?fileId=&id=021e7d7684474107b8f3febbb1c4f8b5&title=中华人民共和国网络安全法
+  site: flk.npc.gov.cn
+  tier: primary
+  fetched_at: '2026-10-07T03:45:00+08:00'
+  http_status: 200
+  content_hash: null
+  snapshot_path: null
+last_verified: '2026-10-08'
+verified_by: automated
+verified_note: 2026-10-08 机器取证含 2 项非绿（未经人工处理），自动入库（verified_by 保持 automated，未经人工核验；需要人工级置信时请对该记录单独走 finreg verify 核验流程）。机器证据：[标题比对/manual]
+  页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），无法比对标题 —— 无法自动取证，需人工核；[日期与状态/manual] 页面正文无法取得（可能为 JS 渲染）—— 无法自动取证，需人工核
+applicable_to:
+- 在中华人民共和国境内建设、运营、维护和使用网络的主体
+key_obligations: []
+language: zh-CN
+tags:
+- 上位法
+- 2025年修正
+notes: 2016-11-07 公布、2017-06-01 施行；2025-10-28 经全国人大常委会修正后重新公布，2026-01-01 起施行修正后文本。修正重点（据官方新闻发布会）含强化与数据安全法、个人信息保护法的衔接及 AI 相关条款。与
+  AI 合规的连接点：网络运营者的安全保护义务是金融机构部署线上 AI 服务的基础设施合规要求。

@@ -1,0 +1,58 @@
+id: npc-2021-pipl
+title: 中华人民共和国个人信息保护法
+title_en: null
+issuer: 全国人民代表大会常务委员会
+issuer_code: npc
+doc_number: 中华人民共和国主席令第九十一号
+jurisdiction: CN
+jurisdiction_detail: null
+instrument_type: 法律
+bindingness: binding
+ai_relevance: related
+domain:
+- 数据
+- 消费者权益
+topics:
+- personal-information
+- ai-governance
+- disclosure
+- consumer-protection
+status: effective
+published_on: '2021-08-20'
+effective_from: '2021-11-01'
+effective_until: null
+supersedes: []
+superseded_by: null
+amends: []
+amended_by: []
+versions:
+- version: 1
+  published_on: '2021-08-20'
+  effective_from: '2021-11-01'
+  effective_until: null
+  status: effective
+  url: http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html
+  archived_url: null
+  content_hash: null
+  change_note: null
+source:
+  url: http://www.npc.gov.cn/npc/c2/c30834/202108/t20210820_313088.html
+  site: npc.gov.cn
+  tier: primary
+  fetched_at: '2026-10-07T03:45:00+08:00'
+  http_status: 200
+  content_hash: null
+  snapshot_path: null
+last_verified: '2026-10-08'
+verified_by: automated
+verified_note: 2026-10-08 机器四层取证全绿，自动入库（verified_by 保持 automated，未经人工核验；需要人工级置信时请对该记录单独走 finreg verify 核验流程）。机器证据：[可达性] 页面可访问（HTTP
+  200，未发生异常重定向）；[标题比对] 页面标题经归一化后与记录一致（互相包含）；[日期与状态] 生效日期 2021-11-01 在原文「自 X 年 X 月 X 日起施行」句式中得到佐证；[义务核对] 记录暂无关键义务条目（草稿阶段待人工提炼）
+applicable_to:
+- 在中华人民共和国境内处理自然人个人信息的活动主体
+key_obligations: []
+language: zh-CN
+tags:
+- 上位法
+- 自动化决策
+notes: 共七十四条。与 AI 合规的连接点：第二十四条要求利用个人信息进行自动化决策时保证决策透明与结果公平公正，不得进行不合理差别待遇，并赋予个人要求说明与拒绝仅通过自动化决策作出决定的权利——金融机构的算法授信、智能定价直接落入该条。文本处理个人信息须以同意等法定事由为基础，约束
+  AI 训练数据获取。

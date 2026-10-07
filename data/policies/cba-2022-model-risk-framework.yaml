@@ -1,0 +1,58 @@
+id: cba-2022-model-risk-framework
+title: 人工智能模型风险管理框架
+title_en: null
+issuer: 中国银行业协会
+issuer_code: cba
+doc_number: TR/CBA 106—2022
+jurisdiction: CN
+jurisdiction_detail: null
+instrument_type: 行业自律规则
+bindingness: guidance
+ai_relevance: core
+domain:
+- 人工智能
+- 银行
+topics:
+- model-risk
+- ai-governance
+- ethics-review
+status: effective
+published_on: '2022-10-24'
+effective_from: '2022-10-24'
+effective_until: null
+supersedes: []
+superseded_by: null
+amends: []
+amended_by: []
+versions:
+- version: 1
+  published_on: '2022-10-24'
+  effective_from: '2022-10-24'
+  effective_until: null
+  status: effective
+  url: https://china-cba.net/Index/showw/catid/251/id/41445
+  archived_url: null
+  content_hash: null
+  change_note: null
+source:
+  url: https://china-cba.net/Index/showw/catid/251/id/41445
+  site: china-cba.net
+  tier: primary
+  fetched_at: '2026-10-07T03:45:00+08:00'
+  http_status: 200
+  content_hash: null
+  snapshot_path: null
+last_verified: '2026-10-08'
+verified_by: automated
+verified_note: 2026-10-08 机器取证含 1 项非绿（未经人工处理），自动入库（verified_by 保持 automated，未经人工核验；需要人工级置信时请对该记录单独走 finreg verify 核验流程）。机器证据：[日期与状态/error]
+  记录填写了生效日期 2022-10-24，但官方页面全文检索不到任何施行/生效/废止表述 —— 疑似编造日期
+applicable_to:
+- 银行业金融机构
+- 中国银行业协会会员单位
+key_obligations: []
+language: zh-CN
+tags:
+- 团体技术报告
+- 模型风险管理
+notes: 关于名称与 id 的说明：本报告立项任务单名为《银行业模型风险管理框架》，2022-10-24 正式公布时定名《人工智能模型风险管理框架》，记录 id 沿用立项名以保持与任务单的可追溯性。文件性质为「团体技术报告」（TR），属技术参考文件。与本库其他记录的关系：它是银行业
+  AI 模型治理框架的先行文件，为理解后续监管规章中的模型风险管理要求提供了行业视角。

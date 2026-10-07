@@ -1,0 +1,54 @@
+id: npc-2021-dsl
+title: 中华人民共和国数据安全法
+title_en: null
+issuer: 全国人民代表大会常务委员会
+issuer_code: npc
+doc_number: 中华人民共和国主席令第八十四号
+jurisdiction: CN
+jurisdiction_detail: null
+instrument_type: 法律
+bindingness: binding
+ai_relevance: background
+domain:
+- 数据
+topics:
+- data-security
+- ai-governance
+status: effective
+published_on: '2021-06-10'
+effective_from: '2021-09-01'
+effective_until: null
+supersedes: []
+superseded_by: null
+amends: []
+amended_by: []
+versions:
+- version: 1
+  published_on: '2021-06-10'
+  effective_from: '2021-09-01'
+  effective_until: null
+  status: effective
+  url: http://www.npc.gov.cn/npc/c2/c30834/202106/t20210610_311888.html
+  archived_url: null
+  content_hash: null
+  change_note: null
+source:
+  url: http://www.npc.gov.cn/npc/c2/c30834/202106/t20210610_311888.html
+  site: npc.gov.cn
+  tier: primary
+  fetched_at: '2026-10-07T03:45:00+08:00'
+  http_status: 200
+  content_hash: null
+  snapshot_path: null
+last_verified: '2026-10-08'
+verified_by: automated
+verified_note: 2026-10-08 机器四层取证全绿，自动入库（verified_by 保持 automated，未经人工核验；需要人工级置信时请对该记录单独走 finreg verify 核验流程）。机器证据：[可达性] 页面可访问（HTTP
+  200，未发生异常重定向）；[标题比对] 页面标题经归一化后与记录一致（互相包含）；[日期与状态] 生效日期 2021-09-01 在原文「自 X 年 X 月 X 日起施行」句式中得到佐证；[义务核对] 记录暂无关键义务条目（草稿阶段待人工提炼）
+applicable_to:
+- 在中华人民共和国境内开展数据处理活动的组织、个人
+key_obligations: []
+language: zh-CN
+tags:
+- 上位法
+- 数据分类分级
+notes: 共五十五条。与 AI 合规的连接点：第二十一条确立数据分类分级保护制度，金融行业据此形成 JR/T 0197 等分级标准，AI 训练数据的定级与管理义务由此派生；第三十条规定重要数据处理者的风险评估义务。

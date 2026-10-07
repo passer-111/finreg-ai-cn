@@ -1,0 +1,66 @@
+{
+  "policy_id": "pbc-2020-jrt0171",
+  "title": "个人金融信息保护技术规范",
+  "url": "https://cfstc.pbc.gov.cn/bzgk/detail/?bzId=1856&id=0",
+  "generated_at": "2026-10-08T07:45:40+08:00",
+  "pending_count": 2,
+  "counts": {
+    "ok": 2,
+    "manual": 2
+  },
+  "checks": [
+    {
+      "check_id": "reachability",
+      "layer": "可达性",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "页面可访问（HTTP 200，未发生异常重定向）",
+      "evidence": [
+        "最终 URL：https://cfstc.pbc.gov.cn/bzgk/detail/?bzId=1856&id=0"
+      ],
+      "options": []
+    },
+    {
+      "check_id": "title",
+      "layer": "标题比对",
+      "status": "manual",
+      "status_label": "需人工核",
+      "summary": "页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），无法比对标题 —— 无法自动取证，需人工核",
+      "evidence": [
+        "记录标题：个人金融信息保护技术规范",
+        "页面 <title>：金融标准全文公开系统"
+      ],
+      "options": [
+        {
+          "key": "confirm-title",
+          "label": "我已人工核对，页面正文确为该文件"
+        }
+      ]
+    },
+    {
+      "check_id": "date",
+      "layer": "日期与状态",
+      "status": "manual",
+      "status_label": "需人工核",
+      "summary": "页面正文无法取得（可能为 JS 渲染）—— 无法自动取证，需人工核",
+      "evidence": [],
+      "options": [
+        {
+          "key": "confirm-date",
+          "label": "我已人工核对原文的施行/废止条款"
+        }
+      ]
+    },
+    {
+      "check_id": "obligations",
+      "layer": "义务核对",
+      "status": "ok",
+      "status_label": "机器通过",
+      "summary": "记录暂无关键义务条目（草稿阶段待人工提炼）",
+      "evidence": [],
+      "options": []
+    }
+  ],
+  "attachments": [],
+  "promoted_on": "2026-10-08"
+}
