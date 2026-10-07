@@ -556,6 +556,50 @@ _EFFECTIVE_DATE_PATTERN = re.compile(
 MAX_EVIDENCE_QUOTES = 8
 
 
+def _squash(text: str) -> str:
+    """压掉全部空白与标点，只留文字，用于「标题是否出现在正文」类包含判断。
+
+    政府站正文里标题常被书名号、换行、空格拆开（《某办法》\n第一章……），
+    不做这一步，「正文里明明有标题」会因为一个换行而判不出来。
+    ``str.isalnum`` 对中日韩表意文字同样为真，因此中文被保留。
+    """
+    # 逐字符保留字母与数字（含中日韩文字）
+    return "".join(ch for ch in text if ch.isalnum())
+
+
+def _page_contains_document(policy: Policy, content: PageContent) -> bool:
+    """判断页面正文是否确含该文件的全文特征（记录标题或发文字号）。
+
+    为什么需要这个判断
+    ------------------
+    日期取证层的「全文 0 命中」只有在**页面真的是全文**时才有意义。
+    实测踩过的坑：nfra 的 ItemDetail 页是 JS 空壳，提取出的「正文」
+    是导航与页脚——长度足够通过 MIN_BODY_TEXT_LEN 的门槛，
+    于是一份有充分原文依据的施行日期被标成红「疑似编造日期」。
+    「取证失败」被偷换成了「证据冲突」，而这两者必须严格分开。
+
+    判定依据取「标题或文号出现在正文里」：全文页必然包含它们，
+    空壳页/栏目页几乎不可能恰好包含——方向是保守的
+    （宁把真全文误判为「需人工核」，不把空壳误判为「全文」）。
+    """
+    # 压平后的正文（一次计算，两处复用）
+    body = _squash(content.body_text)
+    # 特征一：记录标题
+    title_core = _squash(policy.title)
+    # 标题出现在正文 → 全文页
+    if title_core and title_core in body:
+        # 判定为全文
+        return True
+    # 特征二：发文字号（如「主席令第九十一号」；无该字段时跳过）
+    doc_number = getattr(policy, "doc_number", None)
+    # 文号出现在正文 → 全文页
+    if doc_number and _squash(doc_number) in body:
+        # 判定为全文
+        return True
+    # 两个特征都不在 → 不能当作全文页
+    return False
+
+
 def _parse_year(text: str) -> int | None:
     """解析年份：四位阿拉伯数字或逐位中文数字。"""
     # 阿拉伯数字直接转
@@ -668,11 +712,33 @@ def check_dates(policy: Policy, content: PageContent | None) -> list["CheckResul
 
     # --- 情形一：草稿填了生效日期 ---
     if policy.effective_from is not None:
-        # 全文 0 命中：填的日期在原文里找不到任何佐证 → 红「疑似编造日期」。
-        # 这是本层最重要的一条规则：它拦的是「自动化整理倾向把字段填满」
-        # 这一结构性风险（本项目在 policies 数据上实测踩过，见 models.py 规则 11）。
+        # 全文 0 命中时分两种处置，区分「取证失败」与「证据冲突」：
         if total_hits == 0:
-            # 返回红项
+            # 页面不是全文页（空壳/栏目页）——0 命中只说明「取不到证据」，
+            # 不能据此指控日期是编造的。降级为「需人工核」。
+            # 这是实测踩过的坑：nfra 的 JS 空壳页导航文字凑够长度门槛，
+            # 一份有原文依据的日期曾被误判为「疑似编造」。
+            if not _page_contains_document(policy, content):
+                # 返回需人工核
+                return [CheckResult(
+                    check_id=check_id,
+                    layer="日期与状态",
+                    status=STATUS_MANUAL,
+                    summary=(
+                        "页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），"
+                        "无法确认日期表述 —— 无法自动取证，需人工核"
+                    ),
+                    evidence=[],
+                    options=[CheckOption(
+                        key="confirm-date",
+                        label="我已人工核对原文的施行/废止条款",
+                        action={"kind": "acknowledge", "field": "date"},
+                    )],
+                )]
+            # 页面确为全文而 0 命中：填的日期在原文里找不到任何佐证
+            # → 红「疑似编造日期」。这是本层最重要的一条规则：
+            # 它拦的是「自动化整理倾向把字段填满」这一结构性风险
+            # （本项目在 policies 数据上实测踩过，见 models.py 规则 11）。
             return [CheckResult(
                 check_id=check_id,
                 layer="日期与状态",
@@ -748,7 +814,28 @@ def check_dates(policy: Policy, content: PageContent | None) -> list["CheckResul
                 ),
             ],
         )]
-    # 留空且 0 命中：绿——「不知道」与「原文确实没写」一致
+    # 留空且 0 命中，同样先区分「取证失败」与「确实没写」：
+    # 页面不是全文页时，0 命中说明不了「原文没写」，
+    # 若此时给绿「留空与原文一致」，等于空壳页自动放行——
+    # 比误红更糟，这是静默通过。
+    if not _page_contains_document(policy, content):
+        # 返回需人工核
+        return [CheckResult(
+            check_id=check_id,
+            layer="日期与状态",
+            status=STATUS_MANUAL,
+            summary=(
+                "页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），"
+                "无法确认是否存在施行条款 —— 无法自动取证，需人工核"
+            ),
+            evidence=[],
+            options=[CheckOption(
+                key="confirm-date",
+                label="我已人工核对原文的施行/废止条款",
+                action={"kind": "acknowledge", "field": "date"},
+            )],
+        )]
+    # 页面确为全文且 0 命中：绿——「不知道」与「原文确实没写」一致
     return [CheckResult(
         check_id=check_id,
         layer="日期与状态",

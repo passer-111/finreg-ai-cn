@@ -105,6 +105,24 @@ JS_SHELL_HTML = """
 </body></html>
 """
 
+# 一篇「伪全文」页：导航与页脚文字凑得很长（超过 MIN_BODY_TEXT_LEN），
+# 但正文里既没有记录标题也没有发文字号——即 SPA 空壳页的导航部分。
+# 这是实测踩过的坑：这种页面会骗过长度门槛，让「取不到证据」
+# 被偷换成「全文检索不到」，进而把有依据的日期误判为「疑似编造」。
+NAV_ONLY_PAGE_HTML = """
+<html><head><title>某测试机构</title></head>
+<body>
+<nav>首页 机构概况 新闻发布 政策法规 统计数据 行政许可 行政处罚 互动交流 政务公开
+在线办事 金融服务 消费者权益保护 专题专栏  English  手机版  网站地图</nav>
+<div>您当前的位置：首页 &gt; 政策法规 &gt; 部门规章</div>
+<aside>热门推荐：年度工作会议召开｜一季度监管数据发布｜公开征求意见公告｜
+防范非法集资宣传月活动启动｜消费者风险提示第二期｜关于规范市场秩序的通知</aside>
+<footer>版权所有 © 某测试机构 京ICP备00000000号-1 京公网安备 110000000000号
+地址：北京市西城区某大街 1 号 邮编：100000 电话：010-00000000
+网站标识码：bm00000000 建议使用 IE11 以上浏览器访问</footer>
+</body></html>
+"""
+
 
 def _route_text(html: str, status: int = 200):
     """构造一个「无论请求什么都返回固定 HTML」的路由函数。"""
@@ -450,6 +468,74 @@ def test_dates_manual_when_body_unusable() -> None:
     assert results[0].status == STATUS_MANUAL
     # 结论写明需人工核
     assert "需人工核" in results[0].summary
+
+
+def test_dates_manual_not_fabrication_when_page_is_not_fulltext() -> None:
+    """P1 修复核心：填了日期、0 命中、但页面不是全文页时，
+    必须降级为「需人工核」而不是指控「疑似编造日期」。
+
+    「取证失败」与「证据冲突」是两种东西——实测里 nfra 的 JS 空壳页
+    曾让一份有原文依据的日期被误标为疑似编造。
+    """
+    # 构造记录：填了日期
+    policy = _policy_with_url()
+    # 伪全文页（导航文字凑够长度门槛，但无全文特征）
+    content = extract_content(NAV_ONLY_PAGE_HTML)
+    # 前提：长度门槛确实被通过了（否则走不到本分支，测试空转）
+    assert content.usable
+    # 检查
+    results = check_dates(policy, content)
+    # 必须是 manual 而不是 error
+    assert results[0].status == STATUS_MANUAL
+    # 绝不允许出现「疑似编造」的指控
+    assert "疑似编造" not in results[0].summary
+
+
+def test_dates_still_flags_fabrication_on_true_fulltext() -> None:
+    """反向夹逼：页面确为全文（含记录标题）、填了日期、0 命中时，
+    「疑似编造日期」的红旗必须照常举起——不能因为修 P1 而拆掉它。"""
+    # 构造记录：填了日期
+    policy = _policy_with_url()
+    # 真全文页但无日期表述（标题在 <h1> 里，全文特征成立）
+    no_date_html = GOOD_PAGE_HTML.replace("第十八条 本办法自 2026 年 7 月 1 日起施行。", "第十八条 本办法由某测试机构负责解释。")
+    # 提取内容
+    content = extract_content(no_date_html)
+    # 检查
+    results = check_dates(policy, content)
+    # 仍然是红
+    assert results[0].status == STATUS_ERROR
+    # 仍然指控疑似编造
+    assert "疑似编造" in results[0].summary
+
+
+def test_dates_manual_when_blank_and_page_not_fulltext() -> None:
+    """P1 修复另一半：留空、0 命中、页面非全文时不得给绿。
+
+    旧逻辑下这是绿「留空与原文一致」——空壳页自动放行，
+    比误红更糟，是静默通过。
+    """
+    # 构造记录：留空
+    policy = make_policy(title="某测试政策", effective_from=None, source=_policy_with_url().source)
+    # 伪全文页
+    content = extract_content(NAV_ONLY_PAGE_HTML)
+    # 检查
+    results = check_dates(policy, content)
+    # manual，不是绿
+    assert results[0].status == STATUS_MANUAL
+
+
+def test_dates_still_ok_when_blank_and_true_fulltext_zero_hits() -> None:
+    """反向夹逼：页面确为全文、留空、0 命中时，绿必须保留。"""
+    # 构造记录：留空
+    policy = make_policy(title="某测试政策", effective_from=None, source=_policy_with_url().source)
+    # 真全文页无日期表述
+    no_date_html = GOOD_PAGE_HTML.replace("第十八条 本办法自 2026 年 7 月 1 日起施行。", "第十八条 本办法由某测试机构负责解释。")
+    # 提取内容
+    content = extract_content(no_date_html)
+    # 检查
+    results = check_dates(policy, content)
+    # 仍然是绿
+    assert results[0].status == STATUS_OK
 
 
 # ============================================================
