@@ -564,12 +564,36 @@ def check_title(policy: Policy, content: PageContent | None) -> list["CheckResul
             summary="页面 <title> 未命中，但记录标题完整出现在页面正文 —— 同一篇文件",
             evidence=[f"页面 <title>：{content.title}"],
         )]
-    # 三条都不成立：红——很可能指向了另一篇文章
+    # 三条都不成立时，仍要先区分「取证失败」与「证据冲突」（与日期层同理）：
+    # 页面不是全文页（空壳/栏目页），标题对不上只说明「取不到证据」，
+    # 不能据此指控「指向了另一篇文章」。实测修复前两轮出证里
+    # 6 条草稿的标题红全部属于这一类。
+    if not _page_contains_document(policy, content):
+        # 返回需人工核
+        return [CheckResult(
+            check_id=check_id,
+            layer="标题比对",
+            status=STATUS_MANUAL,
+            summary=(
+                "页面正文不含该文件的全文特征（可能为 JS 渲染或栏目页），"
+                "无法比对标题 —— 无法自动取证，需人工核"
+            ),
+            evidence=[f"记录标题：{policy.title}", f"页面 <title>：{content.title}"],
+            options=[CheckOption(
+                key="confirm-title",
+                label="我已人工核对，页面正文确为该文件",
+                action={"kind": "acknowledge", "field": "title"},
+            )],
+        )]
+    # 页面确为全文而标题对不上：红——很可能指向了另一篇文章。
+    # 注意此时「全文」只可能由发文字号佐证（标题若已在正文出现，
+    # 路径三就已通过），因此这个红同时提示「文号对但标题对不上」，
+    # 通常意味着记录标题与公布名不一致，需要人改标题或改链接。
     return [CheckResult(
         check_id=check_id,
         layer="标题比对",
         status=STATUS_ERROR,
-        summary=f"页面标题与记录不符（相似度 {best:.2f}，阈值 {TITLE_SIMILARITY_THRESHOLD}）—— 链接可能指向了另一篇文章",
+        summary=f"页面标题与记录不符（相似度 {best:.2f}，阈值 {TITLE_SIMILARITY_THRESHOLD}）—— 链接可能指向了另一篇文章，或记录标题与公布名不一致",
         evidence=[f"记录标题：{policy.title}", f"页面 <title>：{content.title}"],
         options=[
             CheckOption(

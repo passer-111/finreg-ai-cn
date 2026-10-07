@@ -69,7 +69,7 @@ GOOD_PAGE_HTML = """
 <nav>首页 政策法规 统计数据 政务公开</nav>
 <article>
 <h1>某测试政策</h1>
-<p>某测试政策已经 2026 年第 3 次局务会议审议通过，现予公布。</p>
+<p>某测试政策已经 2026 年第 3 次局务会议审议通过，现予公布。（某机构发〔2026〕3号）</p>
 <p>第一条 为规范人工智能在金融领域的应用，防范相关风险，制定本办法。</p>
 <p>第二条 本办法适用于在中华人民共和国境内设立的金融机构。</p>
 <p>第三条 金融机构应当建立人工智能应用的管理制度，明确牵头部门与职责分工。</p>
@@ -343,9 +343,15 @@ def test_title_ok_when_page_title_matches() -> None:
     assert results[0].status == STATUS_OK
 
 
-def test_title_error_when_page_is_another_article() -> None:
-    """验证页面是另一篇文章时标红。"""
-    # 构造记录
+def test_title_manual_when_page_is_another_article_without_doc_evidence() -> None:
+    """验证页面是另一篇文章、且记录侧无文号可佐证时标「需人工核」。
+
+    为什么不是红：单页取证无法区分「JS 空壳页」与「另一篇文件的全文页」
+    ——两者都不含本记录的标题与文号。能证明「页面是全文」的唯一途径
+    是文号命中（标题若命中，路径三已通过）。旧版在此直接指控
+    「链接指向另一篇文章」，是取证失败偷换成证据冲突（与 P1 同类）。
+    """
+    # 构造记录（工厂默认无 doc_number）
     policy = _policy_with_url()
     # 一篇标题完全不同的页面：全局替换文件名为另一篇
     # （<title>、<h1>、首段三处一起换；只换 <title> 会命中
@@ -356,10 +362,32 @@ def test_title_error_when_page_is_another_article() -> None:
     content = extract_content(other_html)
     # 检查
     results = check_title(policy, content)
+    # manual：取不到证据，不得指控
+    assert results[0].status == STATUS_MANUAL
+    # 结论写明需人工核
+    assert "需人工核" in results[0].summary
+
+
+def test_title_error_when_doc_number_proves_fulltext_but_title_differs() -> None:
+    """反向夹逼：文号证明页面确为全文、标题却对不上时，红必须保留。
+
+    这是标题层唯一能合法举红的情形——典型场景是记录标题用了
+    立项名而页面是公布名（B 线 cba 草稿的真实情况），需要人改标题。
+    """
+    # 构造记录：标题与页面完全不同，但文号与页面一致
+    policy = make_policy(
+        title="另一个完全不同的管理办法",                 # 与页面标题对不上
+        doc_number="某机构发〔2026〕3号",                 # 文号与页面一致
+        source=_policy_with_url().source,                # 溯源
+    )
+    # 页面是全文（含该文号），但标题是「某测试政策」
+    content = extract_content(GOOD_PAGE_HTML)
+    # 检查
+    results = check_title(policy, content)
     # 红
     assert results[0].status == STATUS_ERROR
-    # 结论说明相似度不足
-    assert "不符" in results[0].summary
+    # 结论提示「记录标题与公布名不一致」的可能
+    assert "公布名" in results[0].summary
 
 
 def test_title_manual_when_no_title_tag() -> None:
