@@ -325,6 +325,20 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="DIR",                  # 占位符
         help="把证据卡 JSON 写入指定目录（每张卡一个文件）",  # 说明
     )
+    # 启动本地核验台网页界面
+    verify_parser.add_argument(
+        "--serve",                      # 参数名
+        action="store_true",            # 布尔开关
+        help="启动本地核验台（127.0.0.1，网页上逐字段看证据、点按钮判断、入库）",  # 说明
+    )
+    # 核验台端口
+    verify_parser.add_argument(
+        "--port",                       # 参数名
+        type=int,                       # 整数
+        default=8765,                   # 默认 8765（冷门端口，避开常见开发服务）
+        metavar="N",                    # 占位符
+        help="核验台监听端口（仅 127.0.0.1），默认 8765",  # 说明
+    )
 
     # ------------------------------------------------------------
     # build-site：生成静态站点
@@ -899,6 +913,16 @@ def cmd_verify(args: argparse.Namespace) -> int:
     它们是给人判断的输入，不是程序失败。把「有待判断项」做成非零退出码，
     会让 CI 式的自动化误用这条命令当闸门，而它根本不是闸门。
     """
+    # --serve：启动核验台网页界面（阻塞，Ctrl+C 停止）
+    if args.serve:
+        # 延迟导入：核验台依赖 http.server，普通 verify 调用不需要加载它
+        from finreg_ai.console import serve
+
+        # 启动（阻塞）
+        serve(port=args.port)
+        # 停止后正常返回
+        return EXIT_OK
+
     # 加载全部草稿
     drafts, draft_errors = load_drafts()
     # 草稿目录级错误（目录缺失、文件损坏）必须明确报出并失败

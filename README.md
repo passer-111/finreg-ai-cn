@@ -229,6 +229,7 @@ finreg build-site
 | `finreg validate` | 校验全部数据的完整性（CI 门禁） |
 | `finreg validate-sources` | 只校验数据源登记表 `data/sources.yaml` |
 | `finreg verify <id>` / `finreg verify --all` | 对 `data/drafts/` 的草稿做机器取证（可达性 / 标题 / 日期 / 义务四层），产出核验证据卡。`--json` 可机读，`--output-dir DIR` 落盘 |
+| `finreg verify --serve` | 启动本地核验台（仅 127.0.0.1，默认 8765 端口）：网页上逐字段看证据、点按钮判断、入库草稿；判断与入库全程留痕到 `data/verification-log/` |
 | `finreg build-site` | 从 `data/` 生成静态站点（对外只读视图）。`--output DIR` 换输出位置，`--json` 输出构建结果 |
 
 #### `stale --as-of` 为什么存在
@@ -424,6 +425,7 @@ finreg-ai-cn/
 │   ├── enforcement/         # ← 执法记录（罚单），当前为空目录，见其 README
 │   ├── sources.yaml         # 数据源登记表：唯一的「数据来源真相」
 │   ├── changes/             # 每次抓取的变更流（按日期命名，由 CI 自动写入；同日多次运行会合并）
+│   ├── verification-log/    # 核验台账（JSONL，只增不改）：核验台上每次判断与入库的机器化留痕
 │   └── snapshots/           # 留档快照（第三方来源隔离存放，不入库）
 ├── schema/
 │   ├── policy.schema.json       # 政策记录的 JSON Schema
@@ -448,7 +450,7 @@ finreg-ai-cn/
 │       └── penalty_table.py         # 行政处罚：列表页取地址 → 详情页表格逐行还原
 ├── tests/
 │   ├── fixtures/            # 合成固定装置（离线测试用）
-│   └── test_*.py            # 351 个测试，全部离线
+│   └── test_*.py            # 369 个测试，全部离线
 ├── docs/                    # ← 站点构建产物，不入库（.gitignore）
 ├── CONTRIBUTING.md          # ← 贡献前请先读这个
 ├── DATA_LICENSE.md          # 数据授权说明
