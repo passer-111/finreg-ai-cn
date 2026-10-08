@@ -1,27 +1,27 @@
 # data/drafts —— 政策补录草稿
 
-这个目录存放**未经人工核验的候选政策记录**。它与 `data/policies/` 的关系，
-与「机器发现、人负责认定」这条纪律同源：
+这个目录存放**待机器取证入库的候选政策记录**。当前为空：
+2026-10-08 首批 11 条草稿已经 `finreg verify --auto` 全部入库
+（机器四层取证：可达性 / 标题 / 日期 / 义务，含附件 PDF/DOCX 自动提取）。
 
-| | 谁写入 | 可信度 | 校验 |
+| | 谁写入 | 入库路径 | 置信等级 |
 |---|---|---|---|
-| `data/policies/` | 人工核验后提升 | 字段值已对照官方原文 | 进 `finreg validate` 闸门 |
-| `data/drafts/` | 检索整理（automated） | **仅确认链接可达 + 关键日期有原文依据** | 只过 YAML 语法与 schema 形状检查，不进 CI 闸门 |
+| `data/policies/` | `finreg verify --auto` 自动提升（或核验台人工提升） | 机器四层取证 → 入库后整库校验兜底 | `verified_by=automated`（机器级）；经核验台人工逐项核对后升 `human` |
+| `data/drafts/` | 检索整理（automated） | 待出证 | 草稿不是合规依据 |
 
-**草稿不是合规依据。** 每条草稿的 `verified_by` 一律为 `automated`，
-`verified_note` 写明已核验什么、没核验什么。
-提升为正式记录的路径：人工逐字核对 → 补齐 `key_obligations` →
-移入 `data/policies/` → 过 `finreg validate`。
+**机器级是默认态，人工级按需获取**：用到某条规则需要人工级置信时，
+对该记录走 `finreg verify <id>` 或 `finreg verify --serve` 逐项核对，
+核验台会把 `verified_by` 升为 `human` 并把判断写入 `verified_note` 与台账。
 
 ## 收录纪律（与主库相同）
 
 1. **不知道就留空。** `effective_from` 无法从原文确认时留空并在
-   `verified_note` 说明查找过程（如 shnfra-2026-ai-measures）。
-2. **`source.url` 必须指向文件本身**，且每个 URL 都经过实测（见下表状态码）。
+   `verified_note` 说明查找过程。
+2. **`source.url` 必须指向文件本身**，且每个 URL 都经过实测。
 3. **`key_obligations` 一律留空**，义务提炼是人的工作，机器不代为概括。
 4. **找不到就记「未找到 + 查找过程」**，绝不编造 URL 或文件名。
 
-## 核对清单（2026-10-07 整理）
+## 历史：首批 11 条草稿的核对清单（2026-10-07 整理，已全部入库）
 
 实测方式：`curl --ssl-no-revoke -A "<浏览器 UA>"` 逐个请求，记录状态码。
 所有 11 条均由整理人逐个实测，无「未找到」记录。
@@ -40,10 +40,9 @@
 | amac-2026-ai-application | 基金经营机构大模型技术应用规范 | **200**（fg.amac.org.cn t20260616_27834） | 发布/实施日 2026-04-03（公告落款）、T/AMAC 0004—2026 | 正文为附件，逐字核对 |
 | shnfra-2026-ai-measures | 推动上海银行业保险业人工智能应用的若干措施 | **200**（nfra.gov.cn 上海局 docId=1273268） | 公布日 2026-09-18、沪金发〔2026〕19 号 | **effective_from 留空**：附件未检出施行条款，须人工逐字确认 |
 
-## 提升为正式记录时的前置事项
+## 历史：首批入库时的前置事项（2026-10-08 已处理）
 
-- `amac`、`shnfra` 两个机构代码**尚未登记**在 `data/sources.yaml` 的
-  `issuers` 列表中。提升对应草稿前须先登记机构，否则
-  `finreg validate` 会因未登记机构代码而失败。
+- `amac`、`shnfra` 两个机构代码已在入库前登记进 `data/sources.yaml` 的
+  `issuers` 列表（未登记会导致 `finreg validate` 失败）。
 - JR/T 两项标准暂归 `instrument_type: 其他`（金融行业标准无对应枚举）。
-  若 schema 增设「行业标准」，迁移后再提升。
+  若 schema 增设「行业标准」，届时迁移这两条记录。
