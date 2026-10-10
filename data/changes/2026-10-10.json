@@ -1,0 +1,11 @@
+{
+  "detected_on": "2026-10-10",
+  "generated_at": "2026-10-10T09:43:52+08:00",
+  "policies_scanned": 20,
+  "change_count": 0,
+  "high_significance_count": 0,
+  "failed_sources": [
+    "csrc-regulations"
+  ],
+  "changes": []
+}
